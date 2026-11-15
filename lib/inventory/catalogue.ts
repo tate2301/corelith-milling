@@ -42,6 +42,8 @@ export const UNITS = [
   "INSTALLATION",
   "LITRE",
   "KILOGRAM",
+  "TONNE",
+  "BAG",
   "OTHER",
 ] as const;
 
@@ -55,6 +57,8 @@ export const UNIT_LABELS: Record<UnitOfMeasure, string> = {
   INSTALLATION: "installation",
   LITRE: "litre",
   KILOGRAM: "kg",
+  TONNE: "tonne",
+  BAG: "bag",
   OTHER: "unit",
 };
 
@@ -81,6 +85,15 @@ export const PRICE_LIST_KIND_LABELS: Record<PriceListKind, string> = {
 /** Only goods can be held in stock. Asking "how many hours are on the shelf" is a category error. */
 export function isStockable(kind: ProductKind): boolean {
   return kind === "GOODS" || kind === "MATERIAL";
+}
+
+/**
+ * Whether a product has a net weight per unit to give: goods and materials
+ * counted in something other than a weight. A kilogram or a tonne is its own
+ * weight, and a service has none.
+ */
+export function carriesNetWeight(product: { kind: ProductKind; unit: UnitOfMeasure }): boolean {
+  return isStockable(product.kind) && product.unit !== "KILOGRAM" && product.unit !== "TONNE";
 }
 
 export function unitLabel(product: { unit: UnitOfMeasure; unitLabel?: string | null }): string {
@@ -197,6 +210,8 @@ export type CatalogueProduct = {
   kind: ProductKind;
   unit: UnitOfMeasure;
   unitLabel?: string | null;
+  /** Net kg in one unit; null or absent when unknown (`lib/inventory/weight.ts`). */
+  netWeightKg?: number | null;
   standardPrice: number;
   costPrice?: number | null;
   defaultTaxRate: number;
@@ -268,6 +283,8 @@ export const productSchema = z.object({
   category: z.string().trim().max(80).nullable().optional(),
   unit: z.enum(UNITS).optional(),
   unitLabel: z.string().trim().max(40).nullable().optional(),
+  /** Net kg in one unit, e.g. 10 for a 10 kg bag; null when unknown. */
+  netWeightKg: z.number().finite().positive().max(100000).nullable().optional(),
   standardPrice: z.number().finite().nonnegative(),
   costPrice: z.number().finite().nonnegative().nullable().optional(),
   defaultTaxRate: z.number().finite().min(0).max(100).optional(),
