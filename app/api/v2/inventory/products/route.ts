@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
         category: data.category ?? undefined,
         unit: data.unit ?? "EACH",
         unitLabel: data.unitLabel ?? undefined,
+        netWeightKg: data.netWeightKg ?? undefined,
         standardPrice: data.standardPrice,
         costPrice: data.costPrice ?? undefined,
         defaultTaxRate: data.defaultTaxRate ?? 0,

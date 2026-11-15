@@ -180,6 +180,7 @@ export async function priceProducts(
         kind: product.kind,
         unit: product.unit,
         unitLabel: product.unitLabel,
+        netWeightKg: toNumber(product.netWeightKg),
         standardPrice: toNumberOrZero(product.standardPrice),
         costPrice: toNumber(product.costPrice),
         defaultTaxRate: toNumberOrZero(product.defaultTaxRate),
