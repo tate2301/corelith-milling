@@ -78,6 +78,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         category: data.category,
         unit: data.unit,
         unitLabel: data.unitLabel,
+        netWeightKg: data.netWeightKg,
         standardPrice: data.standardPrice,
         costPrice: data.costPrice,
         defaultTaxRate: data.defaultTaxRate,

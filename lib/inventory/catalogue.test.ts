@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyLineOverrides,
+  carriesNetWeight,
   choosePriceList,
   isStockable,
+  productSchema,
   resolvePrice,
   toCatalogueLine,
   unitLabel,
@@ -48,6 +50,48 @@ describe("isStockable", () => {
     // "How many hours are in stock" is a category error.
     expect(isStockable("SERVICE")).toBe(false);
     expect(isStockable("LABOUR")).toBe(false);
+  });
+});
+
+describe("carriesNetWeight", () => {
+  it("is true for goods and materials counted in bags, each or any other unit", () => {
+    expect(carriesNetWeight({ kind: "GOODS", unit: "BAG" })).toBe(true);
+    expect(carriesNetWeight({ kind: "MATERIAL", unit: "EACH" })).toBe(true);
+    expect(carriesNetWeight({ kind: "GOODS", unit: "OTHER" })).toBe(true);
+  });
+
+  it("is false where the unit is itself a weight", () => {
+    expect(carriesNetWeight({ kind: "GOODS", unit: "KILOGRAM" })).toBe(false);
+    expect(carriesNetWeight({ kind: "MATERIAL", unit: "TONNE" })).toBe(false);
+  });
+
+  it("is false for what cannot be stocked", () => {
+    expect(carriesNetWeight({ kind: "SERVICE", unit: "EACH" })).toBe(false);
+    expect(carriesNetWeight({ kind: "LABOUR", unit: "HOUR" })).toBe(false);
+  });
+});
+
+describe("a product's unit and net weight", () => {
+  const base = { code: "MM-10", name: "Mealie meal 10 kg", standardPrice: 9 };
+
+  it("can be sold by the bag or the tonne", () => {
+    expect(productSchema.parse({ ...base, unit: "BAG" }).unit).toBe("BAG");
+    expect(productSchema.parse({ ...base, unit: "TONNE" }).unit).toBe("TONNE");
+    expect(unitLabel({ unit: "BAG" })).toBe("bag");
+    expect(unitLabel({ unit: "TONNE" })).toBe("tonne");
+  });
+
+  it("takes a net weight, or none", () => {
+    expect(productSchema.parse({ ...base, netWeightKg: 10 }).netWeightKg).toBe(10);
+    expect(productSchema.parse({ ...base, netWeightKg: 0.5 }).netWeightKg).toBe(0.5);
+    expect(productSchema.parse({ ...base, netWeightKg: null }).netWeightKg).toBeNull();
+    expect(productSchema.parse(base).netWeightKg).toBeUndefined();
+  });
+
+  it("refuses a weight that is not a positive, sensible number of kilograms", () => {
+    for (const netWeightKg of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, 100001]) {
+      expect(productSchema.safeParse({ ...base, netWeightKg }).success, String(netWeightKg)).toBe(false);
+    }
   });
 });
 
