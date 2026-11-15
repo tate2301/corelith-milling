@@ -46,7 +46,7 @@ repository variable `FORK_FLAVOUR`.
 
 | Workflow | What it does in a fork |
 | --- | --- |
-| `fork-upstream-sync.yml` | On `core-release`, every Monday, or by hand, `scripts/fork/sync.mjs` merges the newest core release on core's `stable` into `sync/<tag>`. On a clean merge, it opens **chore(sync): core <tag>** with the core notes and the new core migrations. On a conflict, it pushes nothing and opens a `sync-conflict` issue naming the files. More than two releases behind opens a `fork-behind` issue. |
+| `fork-upstream-sync.yml` | On `core-release`, every Monday, or by hand, `scripts/fork/sync.mjs` merges the newest core release on core's `stable` into `sync/<tag>`. On a clean merge, it opens **chore(sync): core <tag>** with the core notes and the new core migrations. If a run pushed `sync/<tag>` but failed to open its PR, the next run opens it. On a conflict, it pushes nothing and opens a `sync-conflict` issue naming the files. More than two releases behind opens a `fork-behind` issue. |
 | `fork-checks.yml` | **Boundary:** the PR touches only the fork's paths (`scripts/fork/boundary-lib.mjs`). `sync/*` PRs are exempt, and the `core-hotfix-approved` label lets a change through but opens an issue to move it to core. **Migration rehearsal:** `prisma migrate deploy` and `scripts/check-schema-drift.mjs` run against a throwaway Neon branch of the cell's production database. |
 | `checks.yml` | Same as core: typecheck, the from-scratch migration build, and the tooling tests. |
 | `release.yml` | Publishes the fork's own `v…-<flavour>.N` releases. A fork never dispatches. |
