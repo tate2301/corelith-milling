@@ -15,6 +15,8 @@
  *   - nothing, when the fork's main already contains the target tag;
  *   - on a clean merge: pushes `sync/<tag>` and opens "chore(sync): core <tag>"
  *     with the core release notes and the list of new core migrations;
+ *   - when `sync/<tag>` was pushed but has no open PR (an earlier run failed
+ *     to open it): opens the PR for the branch as it is;
  *   - on a conflict: pushes nothing and opens a `sync-conflict` issue naming
  *     the files. With the fork boundary held, a conflict means a core file was
  *     changed in the fork;
@@ -120,12 +122,25 @@ if (tryGit("merge-base", "--is-ancestor", target, "origin/main")) {
 
 const branch = `sync/${target}`;
 if (tryGit("ls-remote", "--exit-code", "--heads", "origin", branch)) {
-  console.log(`${branch} already exists; its PR is waiting for review.`);
-  process.exit(0);
+  // A branch without an open PR is a run that pushed and then failed to open it.
+  const open = JSON.parse(gh("pr", "list", "--head", branch, "--state", "open", "--json", "number"));
+  if (open.length > 0) {
+    console.log(`${branch} already exists; its PR is waiting for review.`);
+    process.exit(0);
+  }
+  console.log(`${branch} exists without an open PR; opening it.`);
+} else if (!mergeAndPush()) {
+  process.exit(1);
 }
 
-git("checkout", "-B", branch, "origin/main");
-if (!tryGit("merge", "--no-ff", "--no-edit", "-m", `chore(sync): core ${target}`, target)) {
+/** Merge the target into `sync/<tag>` and push it, or open a conflict issue. */
+function mergeAndPush() {
+  git("checkout", "-B", branch, "origin/main");
+  if (tryGit("merge", "--no-ff", "--no-edit", "-m", `chore(sync): core ${target}`, target)) {
+    // The core tag goes too: `release:promote` names fork releases after the newest core tag merged in.
+    git("push", "--quiet", "origin", `HEAD:refs/heads/${branch}`, `refs/tags/${target}`);
+    return true;
+  }
   const conflicts = git("diff", "--name-only", "--diff-filter=U").split("\n").filter(Boolean);
   git("merge", "--abort");
   openIssueOnce(
@@ -140,13 +155,17 @@ if (!tryGit("merge", "--no-ff", "--no-edit", "-m", `chore(sync): core ${target}`
     ].join("\n"),
     "sync-conflict",
   );
-  process.exit(1);
+  return false;
 }
 
-// The core tag goes too: `release:promote` names fork releases after the newest core tag merged in.
-git("push", "--quiet", "origin", `HEAD:refs/heads/${branch}`, `refs/tags/${target}`);
-
-const notes = git("tag", "--list", "--format=%(contents)", target) || `Core ${target}.`;
+// A PR body holds at most 65,536 characters; the first release lists all of history.
+const MAX_NOTES = 50_000;
+const releaseUrl = `https://github.com/${upstream}/releases/tag/${target}`;
+const fullNotes = git("tag", "--list", "--format=%(contents)", target) || `Core ${target}.`;
+const notes =
+  fullNotes.length > MAX_NOTES
+    ? `${fullNotes.slice(0, MAX_NOTES)}\n\n… cut short; the full notes are in the [${target} release](${releaseUrl}).`
+    : fullNotes;
 const migrations = migrationsFromDiff(git("diff", "--name-only", `origin/main...${target}`).split("\n"));
 const body = [
   `Merges core **${target}** into this fork${base ? ` (from ${base})` : ""}.`,
@@ -167,18 +186,19 @@ const body = [
 ].join("\n");
 
 ensureLabel("sync", "0e8a16", "Core release merged into the fork");
-gh(
-  "pr",
-  "create",
-  "--base",
-  "main",
-  "--head",
-  branch,
-  "--title",
-  `chore(sync): core ${target}`,
-  "--label",
-  "sync",
-  "--body-file",
-  bodyFile(body),
-);
+const prArgs = ["pr", "create", "--base", "main", "--head", branch, "--title", `chore(sync): core ${target}`];
+prArgs.push("--label", "sync", "--body-file", bodyFile(body));
+
+// GitHub's API can take a few seconds to see a branch that was just pushed
+// ("Head ref must be a branch"), so try again before giving up.
+for (let attempt = 1; ; attempt += 1) {
+  try {
+    gh(...prArgs);
+    break;
+  } catch (error) {
+    if (attempt === 5) throw error;
+    console.log(`gh pr create failed (attempt ${attempt}); trying again in ${attempt * 3}s.`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, attempt * 3000);
+  }
+}
 console.log(`✓ Opened the sync PR for core ${target}.`);
