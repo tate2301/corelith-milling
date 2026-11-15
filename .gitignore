@@ -86,3 +86,5 @@ e2e/.auth/
 .dev-server.pid
 .dev-server.log
 design/books/review/
+.env.local.bak
+.env.local
