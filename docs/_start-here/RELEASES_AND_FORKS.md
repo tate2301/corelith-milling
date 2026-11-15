@@ -170,4 +170,6 @@ would not start the fork's checks.
 To exercise the whole loop without GitHub:
 - `scripts/fork/bootstrap.mjs --url <path>` pushes to a local bare repository.
 - `UPSTREAM_GIT_URL=<path>` makes `scripts/fork/sync.mjs` fetch from one.
-- Put a stub `gh` on `PATH` to record the PR and issue calls.
+- Put a stub `gh` on `PATH` to record the PR and issue calls, and set
+  `GITHUB_REPOSITORY` to the fork. Every `gh` call goes to that repository
+  through `GH_REPO`, never to core.
