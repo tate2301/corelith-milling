@@ -22,9 +22,11 @@ import {
   PRODUCT_KIND_LABELS,
   UNITS,
   UNIT_LABELS,
+  carriesNetWeight,
   isStockable,
   type CatalogueProduct,
 } from "@/lib/inventory/catalogue";
+import type { ProductKind, UnitOfMeasure } from "@prisma/client";
 
 export type ProductRecord = CatalogueProduct & {
   category: string | null;
@@ -53,6 +55,7 @@ const EMPTY = {
   category: "",
   unit: "EACH",
   unitLabel: "",
+  netWeightKg: "",
   standardPrice: "",
   costPrice: "",
   defaultTaxRate: "0",
@@ -109,6 +112,8 @@ export function CatalogueProductDialog({
             category: product.category ?? "",
             unit: product.unit,
             unitLabel: product.unitLabel ?? "",
+            netWeightKg:
+              product.netWeightKg === null || product.netWeightKg === undefined ? "" : String(product.netWeightKg),
             standardPrice: String(product.standardPrice),
             costPrice: product.costPrice === null || product.costPrice === undefined ? "" : String(product.costPrice),
             defaultTaxRate: String(product.defaultTaxRate),
@@ -123,6 +128,7 @@ export function CatalogueProductDialog({
   }
 
   const stockable = isStockable(form.kind as ProductRecord["kind"]);
+  const weighable = carriesNetWeight({ kind: form.kind as ProductKind, unit: form.unit as UnitOfMeasure });
 
   // The stock picker only loads for things that can actually be stocked.
   const { data: stockOptions } = useQuery({
@@ -145,6 +151,7 @@ export function CatalogueProductDialog({
         category: form.category.trim() || null,
         unit: form.unit,
         unitLabel: form.unit === "OTHER" ? form.unitLabel.trim() || null : null,
+        netWeightKg: weighable && form.netWeightKg !== "" ? Number(form.netWeightKg) : null,
         standardPrice: Number(form.standardPrice) || 0,
         costPrice: form.costPrice === "" ? null : Number(form.costPrice),
         defaultTaxRate: Number(form.defaultTaxRate) || 0,
@@ -185,6 +192,9 @@ export function CatalogueProductDialog({
     if (!form.name.trim()) found.push("Give it a name.");
     if (form.standardPrice === "" || Number.isNaN(Number(form.standardPrice))) {
       found.push("Give it a price.");
+    }
+    if (weighable && form.netWeightKg !== "" && !(Number(form.netWeightKg) > 0)) {
+      found.push("Net weight must be more than 0 kg, or left empty.");
     }
     setErrors(found);
     if (found.length === 0) save.mutate();
@@ -330,6 +340,25 @@ export function CatalogueProductDialog({
           </FormField>
         ) : null}
       </div>
+
+      {weighable ? (
+        <div className={FIELD_ROW}>
+          <FormField label="Net weight per unit (kg)">
+            {(id) => (
+              <Input
+                id={id}
+                type="number"
+                step="0.001"
+                min="0"
+                inputMode="decimal"
+                className="font-mono"
+                value={form.netWeightKg}
+                onChange={(event) => set("netWeightKg", event.target.value)}
+              />
+            )}
+          </FormField>
+        </div>
+      ) : null}
 
       <div className={FIELD_ROW}>
         <FormField label="Category">

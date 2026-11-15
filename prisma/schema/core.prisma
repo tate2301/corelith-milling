@@ -15745,6 +15745,10 @@ model Product {
   unit               UnitOfMeasure @default(EACH)
   /// Free text when `unit` is OTHER, e.g. "per pallet".
   unitLabel          String?
+  /// Net weight of one unit in kilograms (a 10 kg bag holds 10). Null means
+  /// unknown: tonnage is quantity × netWeightKg ÷ 1000 and is never guessed
+  /// (`lib/inventory/weight.ts`).
+  netWeightKg        Decimal?      @db.Decimal(12, 4)
   /// The fallback price, used when no price list has an entry for this item.
   ///
   /// S-1 — `Decimal`, not `Float`. Retail resolves its shelf price out of this
@@ -16026,6 +16030,10 @@ enum UnitOfMeasure {
   INSTALLATION
   LITRE
   KILOGRAM
+  /// Bulk goods bought or sold by the tonne (maize, bulk meal).
+  TONNE
+  /// A packed unit counted in bags; its weight is the product's `netWeightKg`.
+  BAG
   OTHER
 }
 
