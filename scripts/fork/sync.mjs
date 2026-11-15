@@ -31,12 +31,15 @@ import { join } from "node:path";
 import { coreTagsAfter, isCoreTag, latestCoreTag, migrationsFromDiff } from "../release/release-lib.mjs";
 
 const upstream = process.env.UPSTREAM_REPO;
+// The fork itself: set by Actions. Every `gh` call names it, because with a
+// remote called `upstream` gh would otherwise pick core.
+const fork = process.env.GITHUB_REPOSITORY;
 const token = process.env.GH_TOKEN;
 const requested = process.env.REQUESTED_TAG?.trim() || null;
 const MAX_BEHIND = 2;
 
-if (!upstream || !token) {
-  console.error("UPSTREAM_REPO and GH_TOKEN must be set.");
+if (!upstream || !fork || !token) {
+  console.error("UPSTREAM_REPO, GITHUB_REPOSITORY and GH_TOKEN must be set.");
   process.exit(2);
 }
 
@@ -44,7 +47,7 @@ function run(command, args, options = {}) {
   return execFileSync(command, args, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options }).trim();
 }
 const git = (...args) => run("git", args);
-const gh = (...args) => run("gh", args);
+const gh = (...args) => run("gh", args, { env: { ...process.env, GH_REPO: fork } });
 
 function tryGit(...args) {
   try {
@@ -186,19 +189,18 @@ const body = [
 ].join("\n");
 
 ensureLabel("sync", "0e8a16", "Core release merged into the fork");
-const prArgs = ["pr", "create", "--base", "main", "--head", branch, "--title", `chore(sync): core ${target}`];
-prArgs.push("--label", "sync", "--body-file", bodyFile(body));
-
-// GitHub's API can take a few seconds to see a branch that was just pushed
-// ("Head ref must be a branch"), so try again before giving up.
-for (let attempt = 1; ; attempt += 1) {
-  try {
-    gh(...prArgs);
-    break;
-  } catch (error) {
-    if (attempt === 5) throw error;
-    console.log(`gh pr create failed (attempt ${attempt}); trying again in ${attempt * 3}s.`);
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, attempt * 3000);
-  }
-}
+gh(
+  "pr",
+  "create",
+  "--base",
+  "main",
+  "--head",
+  branch,
+  "--title",
+  `chore(sync): core ${target}`,
+  "--label",
+  "sync",
+  "--body-file",
+  bodyFile(body),
+);
 console.log(`✓ Opened the sync PR for core ${target}.`);
