@@ -1,5 +1,7 @@
 import type { CorelithExtension } from "@/lib/extensions/types";
 
+import { milling } from "./milling";
+
 /**
  * The extensions this deployment runs. Empty in core.
  *
@@ -11,4 +13,4 @@ import type { CorelithExtension } from "@/lib/extensions/types";
  * Core never edits this file after creating it, so that line never conflicts
  * with a core sync. See docs/_start-here/RELEASES_AND_FORKS.md.
  */
-export const registeredExtensions: readonly CorelithExtension[] = [];
+export const registeredExtensions: readonly CorelithExtension[] = [milling];
