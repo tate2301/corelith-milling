@@ -58,7 +58,7 @@ describe("the milling vertical", () => {
     expect(products[0]).toBe("ext.milling");
     const mill = composeNav({ canOpen: canOpenFor(manager), products }).find((group) => group.id === "ext.milling");
     expect(mill?.label).toBe("The mill");
-    expect(mill?.items.map((item) => item.href)).toEqual(["/milling"]);
+    expect(mill?.items.map((item) => item.href)).toEqual(["/milling", "/milling/settings"]);
   });
 
   it("offers the mill's equipment categories to maintenance", () => {

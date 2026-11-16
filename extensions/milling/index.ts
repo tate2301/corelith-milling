@@ -33,6 +33,7 @@ export const milling: CorelithExtension = {
   bundleDependencies: { ADDON_MILLING: ["ADDON_STORES_CORE"] },
   routes: {
     pages: [{ prefix: "/milling", featureKey: "milling.home" }],
+    apis: [{ prefix: "/api/milling/", featureKey: "milling.home" }],
   },
   templates: [
     {
@@ -126,6 +127,9 @@ export const milling: CorelithExtension = {
   },
   nav: {
     label: "The mill",
-    nodes: [{ id: "milling.home", label: "Overview", icon: "home", href: "/milling" }],
+    nodes: [
+      { id: "milling.home", label: "Overview", icon: "home", href: "/milling" },
+      { id: "milling.settings", label: "Settings", icon: "checklist", href: "/milling/settings" },
+    ],
   },
 };

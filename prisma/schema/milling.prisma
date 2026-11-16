@@ -1,0 +1,19 @@
+// The milling vertical's tables (FORK.md, "Database rules").
+//
+// They point at core tables through id columns only (companyId, userId,
+// siteId, productId...). Foreign keys to core are written in the migration
+// SQL, so no core model gains a back-relation field.
+
+/// A person's place in one of the mill's permission groups (lib/milling/access/groups.ts).
+model MillingGroupMember {
+  id          String   @id @default(uuid())
+  companyId   String
+  userId      String
+  /// A MillGroupCode: MANAGEMENT, SUPERVISOR, STORES, QUALITY, OPERATOR, DISPATCH, DRIVER, ADMIN.
+  groupCode   String
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  @@unique([userId, groupCode])
+  @@index([companyId, groupCode])
+}
