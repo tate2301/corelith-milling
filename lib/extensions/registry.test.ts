@@ -1,4 +1,8 @@
+import { existsSync, readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
+
+import { forkFlavourFromDoc } from "../../scripts/release/release-lib.mjs";
 
 import { fixtureExtension } from "@/extensions/__fixture__";
 import { registeredExtensions } from "@/extensions";
@@ -24,11 +28,21 @@ import type { CorelithExtension } from "./types";
 const base: CorelithExtension = { id: "milling", label: "Milling", features: [] };
 const feature = (key: string) => ({ key, name: key, description: key, defaultEnabled: false });
 
-describe("core ships with no extension registered", () => {
-  it("has an empty extensions/index.ts and no extension features", () => {
+// Core has no FORK.md; a fork's names its flavour.
+const forkFlavour = forkFlavourFromDoc(existsSync("FORK.md") ? readFileSync("FORK.md", "utf8") : null);
+
+describe("each deployment registers only its own extension", () => {
+  it.runIf(forkFlavour === null)("core has an empty extensions/index.ts and no extension features", () => {
     expect(registeredExtensions).toEqual([]);
     expect(registeredExtensionLoaders).toEqual({});
     expect(FEATURE_CATALOG.filter((entry) => entry.domain === "extension")).toEqual([]);
+  });
+
+  it.runIf(forkFlavour !== null)("a fork registers exactly its own flavour", () => {
+    expect(registeredExtensions.map((extension) => extension.id)).toEqual([forkFlavour]);
+    for (const entry of FEATURE_CATALOG.filter((feature) => feature.domain === "extension")) {
+      expect(entry.key.startsWith(`${forkFlavour}.`), entry.key).toBe(true);
+    }
   });
 });
 
