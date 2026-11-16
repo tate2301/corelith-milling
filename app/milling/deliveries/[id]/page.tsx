@@ -48,6 +48,10 @@ export default function DeliveryPage() {
             {query.data.vehicle ? `${query.data.vehicle.name}` : ""}
             {query.data.driver ? ` · ${query.data.driver}` : ""}
             {query.data.destination ? ` · to ${query.data.destination}` : ""}
+            {" · "}
+            <Link className="underline" href={`/milling/trace?code=${encodeURIComponent(delivery.code)}`}>
+              Trace
+            </Link>
           </span>
         </div>
         <SectionTabs label="Delivery sections">
@@ -118,10 +122,14 @@ function Trip({ detail }: { detail: Detail }) {
         <TableBody>
           {lines.map((line) => (
             <TableRow key={line.id}>
-              <TableCell className="font-mono">{line.order}</TableCell>
+              <TableCell className="whitespace-nowrap font-mono">{line.order}</TableCell>
               <TableCell>{line.customer}</TableCell>
               <TableCell>{line.product}</TableCell>
-              <TableCell className="font-mono">{line.lot}</TableCell>
+              <TableCell className="whitespace-nowrap font-mono">
+                <Link className="underline" href={`/milling/trace?code=${encodeURIComponent(line.lot)}`}>
+                  {line.lot}
+                </Link>
+              </TableCell>
               <TableCell className="text-right font-mono">{line.bags}</TableCell>
               <TableCell className="text-right font-mono">{line.deliveredBags ?? "—"}</TableCell>
               <TableCell className="text-right font-mono">{line.shortBags || "—"}</TableCell>

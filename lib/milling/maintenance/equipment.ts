@@ -169,3 +169,34 @@ export async function recordGeneratorRun(
     },
   });
 }
+
+/**
+ * Follow the workshop. A breakdown's work order lives in core Maintenance;
+ * when the workshop starts it, the machine is in repair, and when they
+ * complete it, the machine waits for the supervisor's release. Only moves a
+ * machine forward, never back to available: that stays the supervisor's call.
+ */
+export async function followWorkshop(db: PrismaClient, companyId: string) {
+  const stops = await db.millingDowntime.findMany({
+    where: { companyId, endedAt: null, workOrderId: { not: null }, equipmentId: { not: null } },
+    select: { equipmentId: true, workOrderId: true },
+  });
+  if (!stops.length) return 0;
+  const [orders, states] = await Promise.all([
+    db.workOrder.findMany({ where: { companyId, id: { in: stops.map((stop) => stop.workOrderId!) } }, select: { id: true, status: true } }),
+    db.millingEquipmentState.findMany({ where: { companyId, equipmentId: { in: stops.map((stop) => stop.equipmentId!) } } }),
+  ]);
+  let moved = 0;
+  for (const stop of stops) {
+    const order = orders.find((entry) => entry.id === stop.workOrderId);
+    const state = states.find((entry) => entry.equipmentId === stop.equipmentId);
+    if (!order || !state) continue;
+    const next = order.status === "COMPLETED" ? "AWAITING_RELEASE" : order.status === "IN_PROGRESS" ? "IN_REPAIR" : null;
+    const rank = { DOWN: 0, IN_REPAIR: 1, AWAITING_RELEASE: 2, AVAILABLE: 3 } as Record<string, number>;
+    if (next && rank[next] > (rank[state.availability] ?? 3)) {
+      await db.millingEquipmentState.update({ where: { id: state.id }, data: { availability: next } });
+      moved += 1;
+    }
+  }
+  return moved;
+}

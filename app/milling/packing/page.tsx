@@ -51,9 +51,9 @@ export default function MillPackingPage() {
             <TableBody>
               {query.data.map((run) => (
                 <TableRow key={run.id}>
-                  <TableCell className="font-mono">{run.code}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">{run.code}</TableCell>
                   <TableCell>{run.product}</TableCell>
-                  <TableCell className="font-mono">{run.bulkLot}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">{run.bulkLot}</TableCell>
                   <TableCell className="text-right font-mono">{run.bagsPacked}</TableCell>
                   <TableCell className="text-right font-mono">{run.damagedBags || "—"}</TableCell>
                   <TableCell className="text-right font-mono">{formatKg(Number(run.bulkUsedKg))}</TableCell>

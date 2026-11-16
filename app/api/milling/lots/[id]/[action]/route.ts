@@ -6,6 +6,7 @@ import { can } from "@/lib/milling/access/groups";
 import { millRoute, readBody } from "@/lib/milling/api";
 import { decideLot, inspectLot } from "@/lib/milling/quality/lots";
 import { prisma } from "@/lib/prisma";
+import { notifyMill } from "@/lib/milling/notify";
 
 const schemas = {
   inspect: z.object({
@@ -31,7 +32,11 @@ export const POST = millRoute<{ id: string; action: string }>(null, async ({ com
   }
   if (action === "decide") {
     if (!can(access, "qc.decide")) return errorResponse("The quality officer decides.", 403) as NextResponse;
-    return decideLot(prisma, { companyId, userId, lotId: id, ...(await readBody(request, schemas.decide)) });
+    const lot = await decideLot(prisma, { companyId, userId, lotId: id, ...(await readBody(request, schemas.decide)) });
+    if (lot.status === "AVAILABLE" && lot.originType === "BATCH") {
+      await notifyMill(prisma, { companyId, to: "batch.run", actorId: userId, title: `Released for packing: ${lot.code}`, summary: "QC passed it; it can be packed.", viewPath: "/milling/packing", entityId: lot.id });
+    }
+    return lot;
   }
   return errorResponse("No such action.", 404) as NextResponse;
 });

@@ -110,7 +110,7 @@ function ExceptionRow({ exception }: { exception: Exception }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-mono text-sm">{exception.code}</span>
         <span className="font-medium">{exception.title}</span>
-        <MillStatus status={exception.status} />
+        <MillStatus status={exception.status === "OPEN" ? "OPEN_EXCEPTION" : exception.status} />
       </div>
       <div className="text-sm text-muted-foreground">
         {exception.typeLabel} · {exception.severity.toLowerCase()} · raised {formatWhen(exception.createdAt)}

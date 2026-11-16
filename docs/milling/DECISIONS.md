@@ -180,3 +180,50 @@ Every record's History shows its amendments and audit events.
   - the *customer survey by route*. It needs a survey form, so it waits until
     the client says what they ask on a route.
   - *debtors*. It depends on invoicing (D10).
+
+## D12. A person's groups, not their role, open the mill (16 Nov 2026)
+
+The browser walkthrough found that a stores clerk in the Stores group could
+not open the mill. Core gives each role a fixed set of features, and the
+mill's feature is not in the clerk's or the operator's set.
+
+Putting a person in any mill group now switches the mill on for them as a
+per-user feature override, through core's own `setManagedUserFeatureOverride`.
+Taking them out of every group removes the override. Owners and managers have
+the mill by role.
+
+## D13. Telling the next person (16 Nov 2026)
+
+- **Hand-offs.** Each step that hands work on notifies the people whose groups
+  do the next step:
+  - a delivery recorded → quality;
+  - a plan submitted → management; approved → supervisors;
+  - a batch completed → quality; a lot released → supervisors, to pack;
+  - a shift closed → its approvers;
+  - a truck dispatched → its driver; proof of delivery recorded → dispatch;
+  - a breakdown, or a machine repaired → supervisors.
+- **Exceptions.** Every exception is announced to whoever decides it, once,
+  after the write that raised it. This happens wherever it was raised, so no
+  service has to remember to.
+- **In the inbox.** Core's notification types have no slot for an extension, so
+  these go out as operations notices carrying the mill page to open. For now
+  they arrive under "Everything"; exceptions marked high also reach "Needs
+  you". tate2301/huchu#261 adds a core function that lets a hand-off reach
+  "Needs you". Once it is synced, `lib/milling/notify.ts` switches to it.
+
+## D14. The mill drafts, Books decides (16 Nov 2026)
+
+- **Suppliers.** Every delivery's supplier is on file in core's Suppliers:
+  chosen, matched by name, or added. A price a tonne agreed at the gate values
+  the lot, so a batch's maize has a cost.
+- **Supplier bills.** "Bill the supplier" makes a draft supplier bill in Books
+  for the delivery's tonnes. Receiving and paying it, with VAT and the payment
+  limits, are Books' steps.
+- **Customer invoices.** A delivered order's "Draft invoice" makes a draft
+  sales invoice in Books from what was delivered, at the order's price (filled
+  from the product's standard price). Issuing it, which fiscalises it, is a
+  person's step in Books. This answers D10's open question provisionally: the
+  mill can invoice, and it never issues by itself.
+- **Machines.** A breakdown's work order lives in core Maintenance. When the
+  workshop starts it, the mill shows the machine in repair; when they complete
+  it, the machine waits for the supervisor's release.

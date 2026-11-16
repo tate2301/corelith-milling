@@ -3,6 +3,7 @@ import { z } from "zod";
 import { millRoute, readBody } from "@/lib/milling/api";
 import { reportDowntime } from "@/lib/milling/maintenance/equipment";
 import { prisma } from "@/lib/prisma";
+import { notifyMill } from "@/lib/milling/notify";
 
 /** Stops, newest first, with the hours each ran (open ones to now). */
 export const GET = millRoute(null, async ({ companyId }) => {
@@ -28,5 +29,9 @@ const body = z.object({
 
 export const POST = millRoute("fault.report", async ({ companyId, userId }, request) => {
   const input = await readBody(request, body);
-  return reportDowntime(prisma, { companyId, userId, ...input, startedAt: input.startedAt ? new Date(input.startedAt) : undefined });
+  const stop = await reportDowntime(prisma, { companyId, userId, ...input, startedAt: input.startedAt ? new Date(input.startedAt) : undefined });
+  if (stop.category === "BREAKDOWN") {
+    await notifyMill(prisma, { companyId, to: "machine.release", actorId: userId, title: "Breakdown", summary: stop.cause, viewPath: "/milling/maintenance", entityId: stop.id, severity: "WARNING" });
+  }
+  return stop;
 });

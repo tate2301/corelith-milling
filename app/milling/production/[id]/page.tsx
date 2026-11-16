@@ -105,7 +105,10 @@ function BatchBody({ detail }: { detail: Detail }) {
           <ul className="text-sm">
             {sources.map((source) => (
               <li key={source.id}>
-                <span className="font-mono">{source.lot?.code}</span> from {source.location}: <span className="font-mono">{formatKg(Number(source.quantityKg))}</span>
+                <Link className="font-mono underline" href={`/milling/trace?code=${encodeURIComponent(source.lot?.code ?? "")}`}>
+                  {source.lot?.code}
+                </Link>{" "}
+                from {source.location}: <span className="font-mono">{formatKg(Number(source.quantityKg))}</span>
               </li>
             ))}
           </ul>
@@ -176,14 +179,24 @@ function BatchBody({ detail }: { detail: Detail }) {
               {outputs.map((output) => (
                 <TableRow key={output.id}>
                   <TableCell>{output.product?.name}</TableCell>
-                  <TableCell className="font-mono">{output.lot?.code}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">
+                    <Link className="underline" href={`/milling/trace?code=${encodeURIComponent(output.lot?.code ?? "")}`}>
+                      {output.lot?.code}
+                    </Link>
+                  </TableCell>
                   <TableCell>{output.location}</TableCell>
                   <TableCell className="text-right font-mono">
                     {formatKg(Number(output.quantityKg))}
                     {output.isEstimated ? " est." : ""}
                   </TableCell>
                   <TableCell>
-                    <MillStatus status={output.lot?.status} />
+                    {output.lot?.status === "HOLD" ? (
+                      <Link href="/milling/quality">
+                        <MillStatus status="HOLD" />
+                      </Link>
+                    ) : (
+                      <MillStatus status={output.lot?.status} />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -391,9 +404,16 @@ function RecordOutput({ batchId }: { batchId: string }) {
   const [estimated, setEstimated] = useState(false);
   const save = useMillPost({ done: "Output recorded", onDone: () => setOpen(false) });
   const bulk = (lookups.data?.products ?? []).filter((product) => product.category === "Bulk product");
+  const start = () => {
+    // Each output is a different product: start each one empty.
+    setValues({ productId: "", stockLocationId: "", quantityKg: "" });
+    setEstimated(false);
+    save.clearError();
+    setOpen(true);
+  };
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button size="sm" onClick={start}>
         Record output
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

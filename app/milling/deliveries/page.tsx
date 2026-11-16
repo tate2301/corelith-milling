@@ -70,7 +70,7 @@ export default function MillDeliveriesPage() {
             <TableBody>
               {query.data.rows.map((delivery) => (
                 <TableRow key={delivery.id} className="cursor-pointer" onClick={() => router.push(`/milling/deliveries/${delivery.id}`)}>
-                  <TableCell className="font-mono">{delivery.code}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">{delivery.code}</TableCell>
                   <TableCell>{delivery.vehicle ? `${delivery.vehicle.equipmentCode} ${delivery.vehicle.name}` : "—"}</TableCell>
                   <TableCell>{delivery.driver ?? "—"}</TableCell>
                   <TableCell>{delivery.destination ?? "—"}</TableCell>

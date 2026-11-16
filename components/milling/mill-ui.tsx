@@ -18,7 +18,8 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   PASS: { label: "Passed", tone: "passing" },
   FAIL: { label: "Failed", tone: "failing" },
   INCOMPLETE: { label: "Incomplete", tone: "need_changes" },
-  OPEN: { label: "Waiting for a decision", tone: "pending" },
+  OPEN: { label: "Open", tone: "in_progress" },
+  OPEN_EXCEPTION: { label: "Waiting for a decision", tone: "pending" },
   DECIDED: { label: "Decided", tone: "passing" },
   POSTED: { label: "Posted", tone: "passing" },
   AWAITING_DECISION: { label: "Waiting for a decision", tone: "in_review" },
@@ -53,12 +54,13 @@ export function MillStatus({ status }: { status: string | null | undefined }) {
 }
 
 const KG = new Intl.NumberFormat("en-ZW", { maximumFractionDigits: 1 });
+const TONNES = new Intl.NumberFormat("en-ZW", { maximumFractionDigits: 2 });
 const QTY = new Intl.NumberFormat("en-ZW", { maximumFractionDigits: 3 });
 
-/** 30 000 kg, or 30.0 t once it is a tonne or more. */
+/** 950 kg, or 19.95 t once it is a tonne or more. */
 export function formatKg(kg: number | null | undefined): string {
   if (kg === null || kg === undefined || Number.isNaN(kg)) return "—";
-  return Math.abs(kg) >= 1000 ? `${KG.format(kg / 1000)} t` : `${KG.format(kg)} kg`;
+  return Math.abs(kg) >= 1000 ? `${TONNES.format(kg / 1000)} t` : `${KG.format(kg)} kg`;
 }
 
 export const UNIT_SHORT: Record<string, string> = { KILOGRAM: "kg", TONNE: "t", BAG: "bags", EACH: "each", LITRE: "L" };
@@ -77,7 +79,7 @@ export function formatWhen(value: string | Date | null | undefined): string {
 
 export interface MillLookups {
   site: { id: string; name: string } | null;
-  products: Array<{ id: string; code: string | null; name: string; unit: string; unitLabel: string | null; category: string | null; netWeightKg: number | null }>;
+  products: Array<{ id: string; code: string | null; name: string; unit: string; unitLabel: string | null; category: string | null; netWeightKg: number | null; standardPrice: number }>;
   locations: Array<{ id: string; code: string; name: string; kind: string; capacityKg: number | null }>;
   vendors: Array<{ id: string; name: string }>;
   specs: Array<{ id: string; point: string; code: string; name: string; method: string; resultType: string; unit: string | null; minValue: number | null; maxValue: number | null; guidance: string | null; required: boolean; version: number }>;

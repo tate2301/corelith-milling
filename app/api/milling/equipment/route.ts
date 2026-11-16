@@ -1,4 +1,5 @@
 import { millRoute } from "@/lib/milling/api";
+import { followWorkshop } from "@/lib/milling/maintenance/equipment";
 import { millSite } from "@/lib/milling/stock/views";
 import { prisma } from "@/lib/prisma";
 
@@ -6,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 export const GET = millRoute(null, async ({ companyId }) => {
   const site = await millSite(prisma, companyId);
   if (!site) return [];
+  await followWorkshop(prisma, companyId);
   const [equipment, states, open] = await Promise.all([
     prisma.equipment.findMany({ where: { siteId: site.id, isActive: true }, select: { id: true, equipmentCode: true, name: true, category: true }, orderBy: { equipmentCode: "asc" } }),
     prisma.millingEquipmentState.findMany({ where: { companyId } }),

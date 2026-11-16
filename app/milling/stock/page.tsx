@@ -152,6 +152,9 @@ function OnHand({ focusLot }: { focusLot: string | null }) {
                           <Button variant="ghost" size="sm" asChild>
                             <Link href={`/milling/stock?tab=movements&lot=${lot.id}`}>Movements</Link>
                           </Button>
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/milling/trace?code=${encodeURIComponent(lot.code)}`}>Trace</Link>
+                          </Button>
                           {access.can("stock.move") ? (
                             <Button variant="ghost" size="sm" onClick={() => setMoving({ lot: { ...lot, balances: [balance] }, product })}>
                               Move
@@ -312,7 +315,7 @@ function Counts() {
       <TableBody>
         {query.data.map((row) => (
           <TableRow key={row.id}>
-            <TableCell className="font-mono">{row.code}</TableCell>
+            <TableCell className="whitespace-nowrap font-mono">{row.code}</TableCell>
             <TableCell>{row.location ? `${row.location.code} · ${row.location.name}` : "—"}</TableCell>
             <TableCell>{formatWhen(row.countedAt)}</TableCell>
             <TableCell className="text-right font-mono">{row.lines.length}</TableCell>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { millRoute, readBody } from "@/lib/milling/api";
 import { recordIntake } from "@/lib/milling/intake/intake";
 import { prisma } from "@/lib/prisma";
+import { notifyMill } from "@/lib/milling/notify";
 
 const STATUSES = ["AWAITING_QC", "HELD", "ACCEPTED", "REJECTED", "CANCELLED"] as const;
 
@@ -40,9 +41,20 @@ const body = z.object({
   ticketNumber: optionalText,
   ticketFileUrl: optionalText,
   binLocationId: z.string().uuid().nullable().optional(),
+  pricePerTonne: optionalNumber,
   notes: z.preprocess((value) => (value === "" ? null : value), z.string().max(2000).nullable().optional()),
 });
 
-export const POST = millRoute("intake.record", async ({ companyId, userId }, request) =>
-  recordIntake(prisma, { companyId, userId, input: await readBody(request, body) }),
-);
+export const POST = millRoute("intake.record", async ({ companyId, userId }, request) => {
+  const intake = await recordIntake(prisma, { companyId, userId, input: await readBody(request, body) });
+  await notifyMill(prisma, {
+    companyId,
+    to: "qc.record",
+    actorId: userId,
+    title: `Maize to inspect: ${intake.code}`,
+    summary: `${intake.supplierName}, ${Number(intake.netKg).toLocaleString("en-ZW")} kg`,
+    viewPath: `/milling/intake/${intake.id}`,
+    entityId: intake.id,
+  });
+  return intake;
+});

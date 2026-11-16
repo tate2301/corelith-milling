@@ -15,7 +15,8 @@ export const GET = millRoute<{ id: string }>(null, async ({ companyId }, _reques
   ]);
   const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
   return {
-    intake: { ...intake, netKg: num(intake.netKg), grossKg: num(intake.grossKg), tareKg: num(intake.tareKg), bagKg: num(intake.bagKg) },
+    intake: { ...intake, netKg: num(intake.netKg), grossKg: num(intake.grossKg), tareKg: num(intake.tareKg), bagKg: num(intake.bagKg), pricePerTonne: num(intake.pricePerTonne) },
+    bill: intake.billId ? await prisma.purchaseBill.findFirst({ where: { id: intake.billId, companyId }, select: { id: true, billNumber: true, status: true } }) : null,
     productName: product?.name ?? null,
     bin,
     lot: lot ? { id: lot.id, code: lot.code, status: lot.status, onHand: lot.balances.reduce((sum, row) => sum + Number(row.quantity), 0) } : null,

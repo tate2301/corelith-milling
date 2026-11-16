@@ -47,6 +47,8 @@ export interface NewIntake {
   ticketFileUrl?: string | null;
   binLocationId?: string | null;
   notes?: string | null;
+  /** Agreed at the gate: it values the lot, and the supplier's bill. */
+  pricePerTonne?: number | null;
 }
 
 /** The net weight and its status, from the method used. */
@@ -94,10 +96,18 @@ export async function recordIntake(db: PrismaClient, args: { companyId: string; 
   return db.$transaction(async (tx) => {
     const product = await tx.product.findFirst({ where: { id: input.productId, companyId: args.companyId }, select: { id: true } });
     if (!product) throw new IntakeError("That product is not in this workspace.");
-    if (input.supplierId) {
-      const vendor = await tx.vendor.findFirst({ where: { id: input.supplierId, companyId: args.companyId }, select: { id: true } });
+    // Every delivery's supplier is on file in core's Suppliers, so the bill
+    // and the supplier reports find them: chosen, matched by name, or added.
+    let supplierId = input.supplierId ?? null;
+    if (supplierId) {
+      const vendor = await tx.vendor.findFirst({ where: { id: supplierId, companyId: args.companyId }, select: { id: true } });
       if (!vendor) throw new IntakeError("That supplier is not in this workspace.");
+    } else {
+      const name = input.supplierName.trim();
+      const known = await tx.vendor.findFirst({ where: { companyId: args.companyId, name: { equals: name, mode: "insensitive" } }, select: { id: true } });
+      supplierId = known?.id ?? (await tx.vendor.create({ data: { companyId: args.companyId, name }, select: { id: true } })).id;
     }
+    if (input.pricePerTonne !== null && input.pricePerTonne !== undefined && !(input.pricePerTonne >= 0)) throw new IntakeError("The price a tonne cannot be below nothing.");
     if (input.binLocationId) {
       const bin = await tx.stockLocation.findFirst({ where: { id: input.binLocationId, site: { companyId: args.companyId } }, select: { id: true } });
       if (!bin) throw new IntakeError("That location is not at the mill.");
@@ -110,7 +120,8 @@ export async function recordIntake(db: PrismaClient, args: { companyId: string; 
         companyId: args.companyId,
         code,
         productId: input.productId,
-        supplierId: input.supplierId ?? null,
+        supplierId,
+        pricePerTonne: input.pricePerTonne ?? null,
         supplierName: input.supplierName.trim(),
         deliveryRef: input.deliveryRef ?? null,
         vehicleReg: input.vehicleReg ?? null,
@@ -183,6 +194,7 @@ async function ensureReceived(tx: Tx, args: { companyId: string; userId: string;
     lotId: lot.id,
     stockLocationId: args.binLocationId,
     quantity: intake.netKg,
+    unitCost: intake.pricePerTonne ? intake.pricePerTonne.div(1000) : undefined,
     reason: "INTAKE_RECEIPT",
     sourceType: INTAKE_ENTITY,
     sourceId: intake.id,

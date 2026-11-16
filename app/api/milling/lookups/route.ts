@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 export const GET = millRoute(null, async ({ companyId }) => {
   const site = await millSite(prisma, companyId);
   const [products, locations, profiles, vendors, specs, settings, customers, destinations, vehicles, vehicleProfiles] = await Promise.all([
-    prisma.product.findMany({ where: { companyId, kind: { in: ["GOODS", "MATERIAL"] } }, select: { id: true, code: true, name: true, unit: true, unitLabel: true, category: true, netWeightKg: true }, orderBy: { name: "asc" } }),
+    prisma.product.findMany({ where: { companyId, kind: { in: ["GOODS", "MATERIAL"] } }, select: { id: true, code: true, name: true, unit: true, unitLabel: true, category: true, netWeightKg: true, standardPrice: true }, orderBy: { name: "asc" } }),
     site ? prisma.stockLocation.findMany({ where: { siteId: site.id, isActive: true }, select: { id: true, code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] }) : [],
     prisma.millingLocationProfile.findMany({ where: { companyId }, select: { stockLocationId: true, kind: true, capacityKg: true } }),
     prisma.vendor.findMany({ where: { companyId }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 500 }),
@@ -19,7 +19,7 @@ export const GET = millRoute(null, async ({ companyId }) => {
   ]);
   return {
     site,
-    products: products.map((product) => ({ ...product, netWeightKg: product.netWeightKg === null ? null : Number(product.netWeightKg) })),
+    products: products.map((product) => ({ ...product, netWeightKg: product.netWeightKg === null ? null : Number(product.netWeightKg), standardPrice: Number(product.standardPrice) })),
     locations: locations.map((location) => {
       const profile = profiles.find((row) => row.stockLocationId === location.id);
       return { ...location, kind: profile?.kind ?? "STORE", capacityKg: profile?.capacityKg === null || profile?.capacityKg === undefined ? null : Number(profile.capacityKg) };

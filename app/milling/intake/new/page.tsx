@@ -145,6 +145,9 @@ export default function NewIntakePage() {
           {method === "EXTERNAL_TICKET" ? "" : " · provisional until a weighbridge ticket confirms it"}
         </p>
 
+        <Field id="pricePerTonne" label="Price a tonne" help="If agreed at the gate. It values the lot and goes on the supplier's bill.">
+          <Input {...text("pricePerTonne")} inputMode="decimal" className="font-mono" />
+        </Field>
         <Field id="binLocationId" label="Goes into" help="Can be chosen when QC decides.">
           <MillSelect id="binLocationId" value={values.binLocationId} onChange={set("binLocationId")} allowNone options={stores.map((location) => ({ value: location.id, label: `${location.code} · ${location.name}` }))} />
         </Field>

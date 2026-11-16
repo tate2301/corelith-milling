@@ -6,6 +6,7 @@ import { can } from "@/lib/milling/access/groups";
 import { millRoute, readBody } from "@/lib/milling/api";
 import { closeDelivery, dispatchDelivery, loadOrder, recordProofOfDelivery, unloadOrder } from "@/lib/milling/distribution/deliveries";
 import { prisma } from "@/lib/prisma";
+import { notifyMill } from "@/lib/milling/notify";
 
 const num = z.preprocess((value) => (value === "" || value === undefined ? null : value), z.coerce.number().nullable().optional());
 
@@ -37,10 +38,20 @@ export const POST = millRoute<{ id: string; action: string }>(null, async ({ com
       return unloadOrder(prisma, { ...base, ...(await readBody(request, schemas.order)) });
     case "dispatch":
       if (!manage) return refuse();
-      return dispatchDelivery(prisma, { ...base, ...(await readBody(request, schemas.dispatch)) });
+    {
+      const delivery = await dispatchDelivery(prisma, { ...base, ...(await readBody(request, schemas.dispatch)) });
+      if (delivery.driverId) {
+        await notifyMill(prisma, { companyId, to: [delivery.driverId], actorId: userId, title: `Your delivery: ${delivery.code}`, summary: "Record what was delivered when you get there.", viewPath: `/milling/deliveries/${delivery.id}`, entityId: delivery.id });
+      }
+      return delivery;
+    }
     case "proof":
       if (!manage && !can(access, "delivery.own")) return refuse();
-      return recordProofOfDelivery(prisma, { ...base, canManage: manage, ...(await readBody(request, schemas.proof)) });
+    {
+      const delivery = await recordProofOfDelivery(prisma, { ...base, canManage: manage, ...(await readBody(request, schemas.proof)) });
+      await notifyMill(prisma, { companyId, to: "delivery.manage", actorId: userId, title: `Delivered: ${delivery.code}`, summary: `Received by ${delivery.receivedBy}. Reconcile and close it.`, viewPath: `/milling/deliveries/${delivery.id}`, entityId: delivery.id });
+      return delivery;
+    }
     case "close":
       if (!manage) return refuse();
       return closeDelivery(prisma, { ...base, ...(await readBody(request, schemas.close)) });

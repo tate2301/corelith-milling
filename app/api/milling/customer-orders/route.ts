@@ -28,6 +28,7 @@ export const GET = millRoute(null, async ({ companyId }, request) => {
       bags: row.lines.reduce((sum, line) => sum + line.bags, 0),
       kg: row.lines.reduce((sum, line) => sum + line.bags * Number(products.find((product) => product.id === line.productId)?.netWeightKg ?? 0), 0),
       lines: row.lines.map((line) => ({ ...line, product: products.find((product) => product.id === line.productId)?.name ?? "" })),
+      invoiceId: row.invoiceId,
     })),
   };
 });

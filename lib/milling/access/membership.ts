@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { writePlatformAuditEvent } from "@/lib/audit/platform";
+import { clearManagedUserFeatureOverride, setManagedUserFeatureOverride } from "@/lib/platform/user-entitlements";
 
 import { isMillGroupCode, MILL_GROUP_CODES, type MillGroupCode } from "./groups";
 
@@ -42,10 +43,35 @@ export async function listMillMembers(db: Db, companyId: string): Promise<MillMe
 
 export class MillMembershipError extends Error {}
 
+/** The feature that opens the mill. */
+const MILL_FEATURE = "milling.home";
+
+/**
+ * Core gives each role a fixed set of features: a clerk or an operator does
+ * not get the mill's. A person in a mill group gets it as a per-user
+ * override, so their group, not their role, decides whether they reach the
+ * mill. Out of every group, the override goes and the role decides again.
+ * Owners and managers have it by role already.
+ */
+async function syncMillFeature(db: PrismaClient, args: { companyId: string; userId: string; inAGroup: boolean }) {
+  const user = await db.user.findUnique({ where: { id: args.userId }, select: { role: true } });
+  if (!user) return;
+  if (args.inAGroup) {
+    try {
+      await setManagedUserFeatureOverride({ companyId: args.companyId, userId: args.userId, role: user.role, featureKey: MILL_FEATURE, isEnabled: true });
+    } catch (error) {
+      // A workspace without the mill: the groups are kept for when it has it.
+      if (!(error instanceof Error && error.message === "FEATURE_NOT_ENABLED_FOR_COMPANY")) throw error;
+    }
+  } else {
+    await clearManagedUserFeatureOverride(args.userId, MILL_FEATURE);
+  }
+}
+
 /**
  * Put a person in exactly these groups: adds the missing ones, removes the
  * rest, and records the change on the audit chain. Refuses a person from
- * another workspace.
+ * another workspace. Their access to the mill follows (`syncMillFeature`).
  */
 export async function setMillGroups(
   db: PrismaClient,
@@ -54,7 +80,16 @@ export async function setMillGroups(
   const unknown = args.groups.filter((code) => !isMillGroupCode(code));
   if (unknown.length) throw new MillMembershipError(`Unknown group: ${unknown.join(", ")}`);
   const wanted = MILL_GROUP_CODES.filter((code) => args.groups.includes(code));
+  const saved = await writeMillGroups(db, args, wanted);
+  await syncMillFeature(db, { companyId: args.companyId, userId: args.userId, inAGroup: saved.length > 0 });
+  return saved;
+}
 
+async function writeMillGroups(
+  db: PrismaClient,
+  args: { companyId: string; actorId: string; userId: string },
+  wanted: MillGroupCode[],
+): Promise<MillGroupCode[]> {
   return db.$transaction(async (tx) => {
     const user = await tx.user.findFirst({ where: { id: args.userId, companyId: args.companyId }, select: { id: true } });
     if (!user) throw new MillMembershipError("That person is not in this workspace.");

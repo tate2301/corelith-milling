@@ -6,6 +6,7 @@ import { can } from "@/lib/milling/access/groups";
 import { millRoute, readBody } from "@/lib/milling/api";
 import { completeBatch, issueMaize, recordOutput, recordStage } from "@/lib/milling/production/batches";
 import { prisma } from "@/lib/prisma";
+import { notifyMill } from "@/lib/milling/notify";
 
 const num = z.preprocess((value) => (value === "" || value === undefined ? null : value), z.coerce.number().nullable().optional());
 
@@ -48,7 +49,11 @@ export const POST = millRoute<{ id: string; action: string }>(null, async ({ com
     case "complete": {
       if (!can(access, "batch.approve")) return refuse();
       const input = await readBody(request, schemas.complete);
-      return completeBatch(prisma, { ...base, inProcessChangeKg: input.inProcessChangeKg ?? null });
+      const batch = await completeBatch(prisma, { ...base, inProcessChangeKg: input.inProcessChangeKg ?? null });
+      if (batch.status === "COMPLETED") {
+        await notifyMill(prisma, { companyId, to: "qc.record", actorId: userId, title: `Product to inspect: ${batch.code}`, summary: "Its bulk product is on hold until QC releases it.", viewPath: "/milling/quality", entityId: batch.id });
+      }
+      return batch;
     }
     default:
       return errorResponse("No such action.", 404) as NextResponse;

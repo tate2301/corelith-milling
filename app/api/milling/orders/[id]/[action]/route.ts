@@ -6,6 +6,7 @@ import { can } from "@/lib/milling/access/groups";
 import { millRoute, readBody } from "@/lib/milling/api";
 import { approveOrder, setOrderStatus, submitOrder } from "@/lib/milling/production/orders";
 import { prisma } from "@/lib/prisma";
+import { notifyMill } from "@/lib/milling/notify";
 
 const body = z.object({ approveShort: z.boolean().optional(), reason: z.string().max(2000).nullable().optional() }).partial();
 
@@ -15,11 +16,17 @@ export const POST = millRoute<{ id: string; action: string }>("plan.edit", async
   const input = await readBody(request, body.nullable().transform((value) => value ?? {}));
   const base = { companyId, userId, orderId: id };
   switch (action) {
-    case "submit":
-      return submitOrder(prisma, base);
-    case "approve":
+    case "submit": {
+      const order = await submitOrder(prisma, base);
+      await notifyMill(prisma, { companyId, to: "plan.approve", actorId: userId, title: `Plan to approve: ${order.code}`, summary: `${order.shiftKind === "DAY" ? "Day" : "Night"} shift, ${order.productionDate.toISOString().slice(0, 10)}`, viewPath: `/milling/plan/${order.id}`, entityId: order.id });
+      return order;
+    }
+    case "approve": {
       if (!can(access, "plan.approve")) return errorResponse("Only management approves a plan.", 403) as NextResponse;
-      return approveOrder(prisma, { ...base, approveShort: input.approveShort, reason: input.reason });
+      const order = await approveOrder(prisma, { ...base, approveShort: input.approveShort, reason: input.reason });
+      await notifyMill(prisma, { companyId, to: "batch.run", actorId: userId, title: `Plan approved: ${order.code}`, summary: "Its maize is reserved. Start a batch from Production.", viewPath: `/milling/plan/${order.id}`, entityId: order.id });
+      return order;
+    }
     case "send-back":
       if (!can(access, "plan.approve")) return errorResponse("Only management sends a plan back.", 403) as NextResponse;
       return setOrderStatus(prisma, { ...base, status: "DRAFT", reason: input.reason });

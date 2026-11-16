@@ -69,7 +69,7 @@ export default function MillPlanPage() {
             <TableBody>
               {query.data.rows.map((order) => (
                 <TableRow key={order.id} className="cursor-pointer" onClick={() => router.push(`/milling/plan/${order.id}`)}>
-                  <TableCell className="font-mono">{order.code}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">{order.code}</TableCell>
                   <TableCell>{new Date(order.productionDate).toLocaleDateString("en-ZW", { weekday: "short", day: "numeric", month: "short" })}</TableCell>
                   <TableCell>{order.shiftKind === "DAY" ? "Day" : "Night"}</TableCell>
                   <TableCell className="text-right font-mono">{formatKg(order.lines.reduce((sum, line) => sum + Number(line.kg), 0))}</TableCell>

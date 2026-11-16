@@ -52,7 +52,7 @@ export async function removeMill(companyId: string) {
   await prisma.stockMovement.deleteMany({ where: { itemId: { in: items.map((item) => item.id) } } });
   await prisma.inventoryItem.deleteMany({ where: { siteId: { in: siteIds } } });
   await prisma.attendance.deleteMany({ where });
-  await prisma.customer.deleteMany({ where });
+  await prisma.customer.deleteMany({ where }).catch(() => undefined);
   await prisma.workOrder.deleteMany({ where });
   await prisma.employee.deleteMany({ where });
   await prisma.equipment.deleteMany({ where: { siteId: { in: siteIds } } });

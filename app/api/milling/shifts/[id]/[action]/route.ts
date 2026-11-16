@@ -6,6 +6,7 @@ import { can } from "@/lib/milling/access/groups";
 import { millRoute, readBody } from "@/lib/milling/api";
 import { approveShift, closeShift, openShift } from "@/lib/milling/production/shifts";
 import { prisma } from "@/lib/prisma";
+import { notifyMill } from "@/lib/milling/notify";
 
 const body = z
   .object({
@@ -20,7 +21,11 @@ export const POST = millRoute<{ id: string; action: string }>(null, async ({ com
   const base = { companyId, userId, shiftId: id };
   if (action !== "approve" && !can(access, "shift.manage")) return errorResponse("Your groups at the mill do not allow this.", 403) as NextResponse;
   if (action === "open") return openShift(prisma, base);
-  if (action === "close") return closeShift(prisma, { ...base, ...(await readBody(request, body.nullable().transform((value) => value ?? {}))) });
+  if (action === "close") {
+    const shift = await closeShift(prisma, { ...base, ...(await readBody(request, body.nullable().transform((value) => value ?? {}))) });
+    await notifyMill(prisma, { companyId, to: "shift.approve", actorId: userId, title: `Shift to approve: ${shift.code}`, summary: "Approving it sends attendance and overtime to payroll.", viewPath: `/milling/shifts/${shift.id}`, entityId: shift.id });
+    return shift;
+  }
   if (action === "approve") {
     if (!can(access, "shift.approve")) return errorResponse("A supervisor or management approves a shift.", 403) as NextResponse;
     return approveShift(prisma, base);

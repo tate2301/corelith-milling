@@ -87,7 +87,7 @@ export default function MillIntakePage() {
             <TableBody>
               {query.data.rows.map((row) => (
                 <TableRow key={row.id} className="cursor-pointer" onClick={() => router.push(`/milling/intake/${row.id}`)}>
-                  <TableCell className="font-mono">{row.code}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">{row.code}</TableCell>
                   <TableCell>{row.supplierName}</TableCell>
                   <TableCell>{row.vehicleReg ?? "—"}</TableCell>
                   <TableCell className="text-right font-mono">{formatKg(row.netKg)}</TableCell>

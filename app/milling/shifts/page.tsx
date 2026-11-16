@@ -50,7 +50,7 @@ export default function MillShiftsPage() {
             <TableBody>
               {query.data.map((shift) => (
                 <TableRow key={shift.id} className="cursor-pointer" onClick={() => router.push(`/milling/shifts/${shift.id}`)}>
-                  <TableCell className="font-mono">{shift.code}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">{shift.code}</TableCell>
                   <TableCell>{formatWhen(shift.scheduledStart)}</TableCell>
                   <TableCell>{formatWhen(shift.scheduledEnd)}</TableCell>
                   <TableCell className="text-right font-mono">

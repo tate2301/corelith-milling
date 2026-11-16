@@ -8,6 +8,7 @@ import { useState } from "react";
 import { PageChrome } from "@/components/layout/page-chrome";
 import { Field, FormError, Stat } from "@/components/milling/form-bits";
 import { formatWhen, MillSelect, MillStatus } from "@/components/milling/mill-ui";
+import { ReasonDialog } from "@/components/milling/reason-dialog";
 import { RecordHistory } from "@/components/milling/record-history";
 import { useMillAccess } from "@/components/milling/use-mill-access";
 import { useMillPost } from "@/components/milling/use-mill-post";
@@ -52,7 +53,9 @@ export default function ShiftPage() {
         <div className="flex flex-wrap items-center gap-3">
           <MillStatus status={shift.status} />
           <span className="text-sm text-muted-foreground">
-            {formatWhen(shift.actualStart ?? shift.scheduledStart)} to {formatWhen(shift.actualEnd ?? shift.scheduledEnd)}
+            Planned {formatWhen(shift.scheduledStart)} to {formatWhen(shift.scheduledEnd)}
+            {shift.actualStart ? ` · opened ${formatWhen(shift.actualStart)}` : ""}
+            {shift.actualEnd ? ` · closed ${formatWhen(shift.actualEnd)}` : ""}
           </span>
         </div>
         <SectionTabs label="Shift sections">
@@ -78,6 +81,7 @@ function Crew({ detail }: { detail: Detail }) {
   const save = useMillPost();
   const editable = ["PLANNED", "OPEN"].includes(shift.status) && access.can("shift.manage");
   const update = (employeeId: string, patch: Record<string, unknown>) => save.post(`/api/milling/shifts/${shift.id}/crew`, { employeeId, ...patch });
+  const [away, setAway] = useState<{ row: Assignment; attendance: string } | null>(null);
   const withTime = (base: string | null, hhmm: string) => {
     const day = new Date(base ?? shift.scheduledStart);
     const [hours, minutes] = hhmm.split(":").map(Number);
@@ -118,10 +122,9 @@ function Crew({ detail }: { detail: Detail }) {
                 {editable ? (
                   <MillSelect
                     value={row.attendance}
-                    onChange={(attendance) => {
-                      const reason = attendance === "ABSENT" || attendance === "ON_LEAVE" ? window.prompt("Why are they not at work?") : null;
-                      update(row.employeeId, { attendance, ...(reason ? { absenceReason: reason } : {}) });
-                    }}
+                    onChange={(attendance) =>
+                      attendance === "ABSENT" || attendance === "ON_LEAVE" ? setAway({ row, attendance }) : update(row.employeeId, { attendance, absenceReason: null })
+                    }
                     options={ATTENDANCE}
                   />
                 ) : (
@@ -143,6 +146,20 @@ function Crew({ detail }: { detail: Detail }) {
         </TableBody>
       </Table>
       <ShiftActions detail={detail} />
+      {away ? (
+        <ReasonDialog
+          title={`${away.row.name} is ${away.attendance === "ABSENT" ? "absent" : "on leave"}`}
+          description="The reason goes to their attendance record for payroll."
+          confirmLabel="Save"
+          pending={save.pending}
+          error={save.error}
+          onClose={() => setAway(null)}
+          onConfirm={(reason) => {
+            update(away.row.employeeId, { attendance: away.attendance, absenceReason: reason });
+            setAway(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

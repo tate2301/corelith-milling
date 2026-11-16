@@ -9,7 +9,9 @@ import { PageChrome } from "@/components/layout/page-chrome";
 import { formatKg, formatWhen, MillSelect, MillStatus, useMillLookups, type MillLookups } from "@/components/milling/mill-ui";
 import { InspectForm, InspectionResults } from "@/components/milling/inspection";
 import { RecordHistory } from "@/components/milling/record-history";
+import { FormError } from "@/components/milling/form-bits";
 import { useMillAccess } from "@/components/milling/use-mill-access";
+import { useMillPost } from "@/components/milling/use-mill-post";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -43,7 +45,10 @@ type Detail = {
     receivedAt: string;
     decisionNote: string | null;
     notes: string | null;
+    pricePerTonne: number | null;
+    billId: string | null;
   };
+  bill: { id: string; billNumber: string | null; status: string } | null;
   productName: string | null;
   bin: { code: string; name: string } | null;
   lot: { id: string; code: string; status: string; onHand: number } | null;
@@ -106,12 +111,10 @@ function DeliveryAndQc({ detail, lookups }: { detail: Detail; lookups: MillLooku
   const access = useMillAccess();
   const open = ["AWAITING_QC", "HELD"].includes(intake.status);
   const openExceptions = exceptions.filter((exception) => exception.status === "OPEN");
-  const weight =
-    intake.weighMethod === "BAG_COUNT"
-      ? `${intake.bags} bags × ${intake.bagKg} kg`
-      : intake.weighMethod === "EXTERNAL_TICKET"
-        ? `Ticket ${intake.ticketNumber}${intake.grossKg ? ` · ${formatKg(intake.grossKg)} gross, ${formatKg(intake.tareKg)} tare` : ""}`
-        : "Supplier's declared weight";
+  const ticket = intake.ticketNumber ? `Ticket ${intake.ticketNumber}${intake.grossKg ? ` · ${formatKg(intake.grossKg)} gross, ${formatKg(intake.tareKg)} tare` : ""}` : null;
+  const first = intake.weighMethod === "BAG_COUNT" ? `${intake.bags} bags × ${intake.bagKg} kg` : intake.weighMethod === "SUPPLIER_DECLARED" ? "Supplier's declared weight" : null;
+  // Confirmed by a ticket after a first estimate: the ticket, and what it replaced.
+  const weight = ticket && first ? `${ticket} (first counted as ${first})` : ticket ?? first ?? "—";
 
   return (
     <div className="space-y-8">
@@ -133,12 +136,35 @@ function DeliveryAndQc({ detail, lookups }: { detail: Detail; lookups: MillLooku
           )}
           {lot ? <> · <MillStatus status={lot.status} /></> : null}
           {detail.bin ? ` · in ${detail.bin.code}` : ""}
+          {lot ? (
+            <>
+              {" · "}
+              <Link className="underline" href={`/milling/trace?code=${encodeURIComponent(lot.code)}`}>
+                Trace
+              </Link>
+            </>
+          ) : null}
+        </Item>
+        <Item label="Price a tonne">
+          <span className="font-mono">{intake.pricePerTonne ?? "—"}</span>
+        </Item>
+        <Item label="Supplier's bill">
+          {detail.bill ? (
+            <Link className="underline" href={`/books/bills/${detail.bill.id}`}>
+              {detail.bill.billNumber ?? "Draft"} in Books
+            </Link>
+          ) : (
+            "Not billed"
+          )}
         </Item>
       </dl>
 
-      {intake.weightStatus === "PROVISIONAL" && access.can("intake.record") && !["REJECTED", "CANCELLED"].includes(intake.status) ? (
-        <ConfirmWeight intakeId={intake.id} />
-      ) : null}
+      <div className="flex flex-wrap gap-2">
+        {intake.weightStatus === "PROVISIONAL" && access.can("intake.record") && !["REJECTED", "CANCELLED"].includes(intake.status) ? (
+          <ConfirmWeight intakeId={intake.id} />
+        ) : null}
+        {intake.status === "ACCEPTED" && !detail.bill && access.can("intake.record") ? <BillSupplier intakeId={intake.id} price={intake.pricePerTonne} /> : null}
+      </div>
 
       {openExceptions.length ? (
         <Alert variant="warning">
@@ -274,6 +300,41 @@ function ConfirmWeight({ intakeId }: { intakeId: string }) {
             </Button>
             <Button disabled={save.isPending} onClick={() => (setError(null), save.mutate())}>
               Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** Draft the supplier's bill in Books: the tonnes at the price. Books receives and pays it. */
+function BillSupplier({ intakeId, price }: { intakeId: string; price: number | null }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(price ? String(price) : "");
+  const bill = useMillPost({ done: "Draft bill made in Books", onDone: () => setOpen(false) });
+  return (
+    <>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        Bill the supplier
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bill the supplier</DialogTitle>
+            <DialogDescription>Makes a draft supplier bill in Books for this delivery&apos;s tonnes. Books receives it and pays it.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="bill-price">Price a tonne</Label>
+            <Input id="bill-price" className="font-mono" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} />
+          </div>
+          <FormError error={bill.error} />
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={bill.pending} onClick={() => bill.post(`/api/milling/intakes/${intakeId}/bill`, { pricePerTonne: value })}>
+              Make the draft bill
             </Button>
           </DialogFooter>
         </DialogContent>

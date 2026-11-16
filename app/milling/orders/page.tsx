@@ -9,6 +9,7 @@ import { Fragment, useState } from "react";
 import { PageChrome } from "@/components/layout/page-chrome";
 import { Field, FormError } from "@/components/milling/form-bits";
 import { formatKg, formatWhen, MillSelect, MillStatus, useMillLookups } from "@/components/milling/mill-ui";
+import { ReasonDialog } from "@/components/milling/reason-dialog";
 import { useMillAccess } from "@/components/milling/use-mill-access";
 import { useMillPost } from "@/components/milling/use-mill-post";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchJson } from "@/lib/api-client";
 
-type Order = { id: string; code: string; status: string; customer: string; destination: string | null; requiredDate: string | null; createdAt: string; bags: number; kg: number; lines: Array<{ id: string; product: string; bags: number }> };
+type Order = { id: string; code: string; status: string; invoiceId: string | null; customer: string; destination: string | null; requiredDate: string | null; createdAt: string; bags: number; kg: number; lines: Array<{ id: string; product: string; bags: number }> };
 
 const TABS = [
   { status: "DRAFT", label: "Drafts" },
@@ -35,6 +36,8 @@ export default function MillOrdersPage() {
   const access = useMillAccess();
   const act = useMillPost({ done: "Saved" });
   const [open, setOpen] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<Order | null>(null);
+  const cancel = useMillPost({ done: "Order cancelled", onDone: () => setCancelling(null) });
   const query = useQuery({ queryKey: ["milling", "customer-orders", status], queryFn: () => fetchJson<{ rows: Order[]; counts: Record<string, number> }>(`/api/milling/customer-orders?status=${status}`) });
   return (
     <>
@@ -73,7 +76,7 @@ export default function MillOrdersPage() {
               {query.data.rows.map((order) => (
                 <Fragment key={order.id}>
                   <TableRow className="cursor-pointer" onClick={() => setOpen(open === order.id ? null : order.id)}>
-                    <TableCell className="font-mono">{order.code}</TableCell>
+                    <TableCell className="whitespace-nowrap font-mono">{order.code}</TableCell>
                     <TableCell>{order.customer}</TableCell>
                     <TableCell>{order.destination ?? "Collected"}</TableCell>
                     <TableCell>{order.requiredDate ? new Date(order.requiredDate).toLocaleDateString("en-ZW", { day: "numeric", month: "short" }) : "—"}</TableCell>
@@ -88,15 +91,18 @@ export default function MillOrdersPage() {
                           Confirm
                         </Button>
                       ) : null}
+                      {order.status === "DELIVERED" && !order.invoiceId && access.can("order.manage") ? (
+                        <Button size="sm" variant="secondary" onClick={() => act.post(`/api/milling/customer-orders/${order.id}/invoice`)}>
+                          Draft invoice
+                        </Button>
+                      ) : null}
+                      {order.invoiceId ? (
+                        <Link className="text-sm underline" href={`/books/invoices/${order.invoiceId}`}>
+                          Invoice in Books
+                        </Link>
+                      ) : null}
                       {["DRAFT", "CONFIRMED"].includes(order.status) && access.can("order.manage") ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            const reason = window.prompt(`Why cancel ${order.code}?`);
-                            if (reason) act.post(`/api/milling/customer-orders/${order.id}/cancel`, { reason });
-                          }}
-                        >
+                        <Button size="sm" variant="ghost" onClick={() => setCancelling(order)}>
                           Cancel
                         </Button>
                       ) : null}
@@ -119,6 +125,18 @@ export default function MillOrdersPage() {
             </TableBody>
           </Table>
         )}
+        {cancelling ? (
+          <ReasonDialog
+            title={`Cancel ${cancelling.code}?`}
+            description="Its bags are released for other orders. The reason is kept with the order."
+            confirmLabel="Cancel the order"
+            destructive
+            pending={cancel.pending}
+            error={cancel.error}
+            onClose={() => setCancelling(null)}
+            onConfirm={(reason) => cancel.post(`/api/milling/customer-orders/${cancelling.id}/cancel`, { reason })}
+          />
+        ) : null}
         <p className="text-sm text-muted-foreground">
           Customers are kept under <Link className="underline" href="/crm/customers">Customers</Link>.
         </p>
@@ -133,8 +151,8 @@ function NewOrder() {
   const [customerId, setCustomerId] = useState("");
   const [destinationId, setDestinationId] = useState("");
   const [requiredDate, setRequiredDate] = useState("");
-  const [lines, setLines] = useState([{ productId: "", bags: "" }]);
-  const save = useMillPost({ done: "Order saved", onDone: () => (setOpen(false), setLines([{ productId: "", bags: "" }])) });
+  const [lines, setLines] = useState([{ productId: "", bags: "", unitPrice: "" }]);
+  const save = useMillPost({ done: "Order saved", onDone: () => (setOpen(false), setLines([{ productId: "", bags: "", unitPrice: "" }])) });
   const packed = (lookups.data?.products ?? []).filter((product) => product.unit === "BAG");
   return (
     <>
@@ -158,12 +176,21 @@ function NewOrder() {
               </Field>
             </div>
             {lines.map((line, index) => (
-              <div key={index} className="grid grid-cols-[1fr_7rem] gap-2">
-                <MillSelect value={line.productId} onChange={(productId) => setLines((current) => current.map((entry, at) => (at === index ? { ...entry, productId } : entry)))} placeholder="Product" options={packed.map((product) => ({ value: product.id, label: product.name }))} />
+              <div key={index} className="grid grid-cols-[1fr_6rem_7rem] gap-2">
+                <MillSelect
+                  value={line.productId}
+                  onChange={(productId) => {
+                    const price = packed.find((product) => product.id === productId)?.standardPrice;
+                    setLines((current) => current.map((entry, at) => (at === index ? { ...entry, productId, unitPrice: entry.unitPrice || (price ? String(price) : "") } : entry)));
+                  }}
+                  placeholder="Product"
+                  options={packed.map((product) => ({ value: product.id, label: product.name }))}
+                />
                 <Input aria-label="Bags" placeholder="bags" inputMode="numeric" className="font-mono" value={line.bags} onChange={(event) => setLines((current) => current.map((entry, at) => (at === index ? { ...entry, bags: event.target.value } : entry)))} />
+                <Input aria-label="Price a bag" placeholder="price a bag" inputMode="decimal" className="font-mono" value={line.unitPrice} onChange={(event) => setLines((current) => current.map((entry, at) => (at === index ? { ...entry, unitPrice: event.target.value } : entry)))} />
               </div>
             ))}
-            <Button variant="ghost" size="sm" onClick={() => setLines((current) => [...current, { productId: "", bags: "" }])}>
+            <Button variant="ghost" size="sm" onClick={() => setLines((current) => [...current, { productId: "", bags: "", unitPrice: "" }])}>
               Add a product
             </Button>
             <FormError error={save.error} />
@@ -179,7 +206,7 @@ function NewOrder() {
                   customerId,
                   destinationId: destinationId || null,
                   requiredDate: requiredDate || null,
-                  lines: lines.filter((line) => line.productId && Number(line.bags) > 0),
+                  lines: lines.filter((line) => line.productId && Number(line.bags) > 0).map((line) => ({ ...line, unitPrice: line.unitPrice || null })),
                 })
               }
             >

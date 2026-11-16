@@ -60,3 +60,25 @@ describe("mill group membership", () => {
     ).rejects.toThrow("not in this workspace");
   });
 });
+
+describe("mill access follows the groups", () => {
+  it("opens the mill to a clerk in a group, and closes it when they leave every group", async () => {
+    const { getEffectiveFeaturesForUser } = await import("@/lib/platform/user-entitlements");
+    const { provisionTenant } = await import("@/lib/platform/provision");
+    const slug = `access-${run}`;
+    const tenant = await provisionTenant({ name: `Access ${run}`, slug, templateCode: "TEMPLATE_MILLING", tierCode: "ENTERPRISE", adminEmail: `boss-${run}@x.test`, adminName: "Boss", subscriptionStatus: "ACTIVE", actor: "test", reason: "test" });
+    const companyId = tenant.company.id;
+    const clerk = await prisma.user.create({ data: { name: "Clerk", email: `mill-clerk-${run}@x.test`, role: "CLERK", companyId } });
+    const features = () => getEffectiveFeaturesForUser({ companyId, userId: clerk.id, role: "CLERK" });
+    try {
+      expect(await features()).not.toContain("milling.home");
+      await setMillGroups(prisma, { companyId, actorId: tenant.admin.id, userId: clerk.id, groups: ["STORES"] });
+      expect(await features()).toContain("milling.home");
+      await setMillGroups(prisma, { companyId, actorId: tenant.admin.id, userId: clerk.id, groups: [] });
+      expect(await features()).not.toContain("milling.home");
+    } finally {
+      await prisma.userFeatureFlag.deleteMany({ where: { userId: clerk.id } });
+      await prisma.millingGroupMember.deleteMany({ where: { companyId } });
+    }
+  });
+});

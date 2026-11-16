@@ -61,7 +61,7 @@ export default function MillProductionPage() {
             <TableBody>
               {query.data.map((batch) => (
                 <TableRow key={batch.id} className="cursor-pointer" onClick={() => router.push(`/milling/production/${batch.id}`)}>
-                  <TableCell className="font-mono">{batch.code}</TableCell>
+                  <TableCell className="whitespace-nowrap font-mono">{batch.code}</TableCell>
                   <TableCell>{formatWhen(batch.startedAt)}</TableCell>
                   <TableCell className="text-right font-mono">{formatKg(Number(batch.maizeIssuedKg))}</TableCell>
                   <TableCell className="text-right font-mono">{formatKg(batch.outputKg)}</TableCell>

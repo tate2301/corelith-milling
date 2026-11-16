@@ -9,6 +9,14 @@ export function targetHref(targetType: string, targetId: string): string | null 
       return `/milling/production/${targetId}`;
     case "MillingDelivery":
       return `/milling/deliveries/${targetId}`;
+    case "MillingLot":
+      return "/milling/quality";
+    case "MillingEquipment":
+      return "/milling/maintenance";
+    case "MillingShift":
+      return `/milling/shifts/${targetId}`;
+    case "MillingProductionOrder":
+      return `/milling/plan/${targetId}`;
     default:
       return null;
   }

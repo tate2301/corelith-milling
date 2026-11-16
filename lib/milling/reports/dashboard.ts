@@ -1,10 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { followWorkshop } from "../maintenance/equipment";
 import { millDate } from "../production/shifts";
 import { millDayWindow } from "./daily";
 
 /** The mill now, for its home page (plan 4.13): each tile something someone acts on. */
 export async function millDashboard(db: PrismaClient, companyId: string) {
+  await followWorkshop(db, companyId);
   const today = millDayWindow(new Date(Date.now() + 2 * 60 * 60 * 1000));
   const [shift, batches, orders, balances, products, machines, states, openStops, deliveries, exceptions, intakesWaiting, lotsOnHold] = await Promise.all([
     db.millingShift.findFirst({ where: { companyId, status: "OPEN" }, include: { assignments: true }, orderBy: { scheduledStart: "desc" } }),
