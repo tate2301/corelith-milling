@@ -6,7 +6,14 @@ export function millDayStamp(at: Date = new Date()): string {
   return local.toISOString().slice(2, 10).replace(/-/g, "");
 }
 
-type CodeTable = "millingIntake" | "millingLot" | "millingException" | "millingStockCount";
+type CodeTable =
+  | "millingIntake"
+  | "millingLot"
+  | "millingException"
+  | "millingStockCount"
+  | "millingProductionOrder"
+  | "millingBatch"
+  | "millingPackRun";
 
 /**
  * The next code in a day's series, e.g. MI-261116-03. Read inside the

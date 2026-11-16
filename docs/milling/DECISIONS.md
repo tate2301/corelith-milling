@@ -100,3 +100,28 @@ it changes only through an amendment: a reason, plus each field's old and new
 value, kept in `MillingAmendment` and on the audit chain. Stock is never
 amended: a stock correction is a reversal and a new movement, as in core.
 Every record's History shows its amendments and audit events.
+
+## D9. Production as batches through the route, balanced at completion (16 Nov 2026)
+
+- An approved production order reserves maize, oldest lot first. When maize
+  or bags are short, management may approve anyway; that requires a reason,
+  which is kept.
+- A batch takes maize from one or more lots. Each stage records its own
+  quantities, each marked measured or estimated. Water is counted in, at
+  1 kg a litre.
+- At completion: maize + water = product out + separated material + change in
+  material in the line + unaccounted. Unaccounted beyond the mill's tolerance
+  raises an exception. The batch waits until management accepts the variance
+  or sends it back to recount.
+- Bulk product goes into one lot per product per batch, on hold until QC
+  releases it. Only released bulk can be packed.
+- A breakdown takes the machine out of use and raises a core WorkOrder, so
+  the workshop sees it in Maintenance. A stage cannot name that machine until
+  a supervisor releases it. The release closes the stop and completes the work
+  order.
+- Shift approval writes core Attendance (the date the shift started, DAY or
+  NIGHT, overtime against the shift length), so payroll needs nothing new.
+- Generator runs are logged with hours and litres; diesel is not stocked. If
+  the mill later keeps diesel in Stores, runs can issue it from there.
+- Costing (first pass): a batch records the value of its maize at the stock
+  line's cost when issued. Full costing of outputs is left to reporting (L5).

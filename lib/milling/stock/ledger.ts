@@ -443,3 +443,31 @@ export async function lotsAgainstCore(tx: Tx | Prisma.TransactionClient, company
     return { productId: line.productId!, onHand: line.currentStock, inLots, notInALot: line.currentStock.minus(inLots) };
   });
 }
+
+/**
+ * Issue a quantity of a product from its available lots, oldest first, across
+ * locations: bags and thread for packing, where which lot does not matter.
+ */
+export async function issueOldestFirst(
+  tx: Tx,
+  args: Source & { productId: string; quantity: Qty; reason: LotReason; label: string },
+) {
+  let left = dec(args.quantity);
+  if (left.lte(0)) return [];
+  const balances = await tx.millingLotBalance.findMany({
+    where: { companyId: args.companyId, lot: { productId: args.productId, status: "AVAILABLE" } },
+    include: { lot: { select: { producedAt: true } } },
+  });
+  balances.sort((a, b) => a.lot.producedAt.getTime() - b.lot.producedAt.getTime());
+  const free = balances.reduce((sum, row) => sum.plus(row.quantity).minus(row.reserved), new Prisma.Decimal(0));
+  if (free.lt(left)) throw new StockLedgerError(`Not enough ${args.label}: ${free.toString()} free, ${left.toString()} needed.`);
+  const movements = [];
+  for (const balance of balances) {
+    if (left.lte(0)) break;
+    const take = Prisma.Decimal.min(balance.quantity.minus(balance.reserved), left);
+    if (take.lte(0)) continue;
+    movements.push(await issueFromLot(tx, { ...args, lotId: balance.lotId, stockLocationId: balance.stockLocationId, quantity: take }));
+    left = left.minus(take);
+  }
+  return movements;
+}

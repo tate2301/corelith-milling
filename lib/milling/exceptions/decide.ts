@@ -1,6 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { decideIntakeIn, INTAKE_ENTITY } from "../intake/intake";
+import { BATCH_ENTITY, settleVarianceIn } from "../production/batches";
+import { decideLotIn, LOT_ENTITY } from "../quality/lots";
 import { COUNT_ENTITY, settleCountIn } from "../stock/counts";
 import { decideException } from "./exceptions";
 
@@ -24,6 +26,15 @@ export async function decideAndApply(
       const intake = await tx.millingIntake.findFirst({ where: { id: exception.targetId, companyId: args.companyId }, select: { status: true } });
       if (intake && ["AWAITING_QC", "HELD"].includes(intake.status)) {
         await decideIntakeIn(tx, { ...base, intakeId: exception.targetId, decision: "REJECT", note: args.note });
+      }
+    }
+    if (exception.targetType === BATCH_ENTITY) {
+      await settleVarianceIn(tx, { companyId: args.companyId, batchId: exception.targetId, decision: exception.decision ?? "" });
+    }
+    if (exception.targetType === LOT_ENTITY && exception.decision === "REJECT") {
+      const lot = await tx.millingLot.findFirst({ where: { id: exception.targetId, companyId: args.companyId }, select: { status: true } });
+      if (lot && ["HOLD", "AVAILABLE"].includes(lot.status)) {
+        await decideLotIn(tx, { ...base, lotId: exception.targetId, decision: "REJECT", note: args.note });
       }
     }
     return exception;

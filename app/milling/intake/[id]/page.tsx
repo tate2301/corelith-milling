@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { PageChrome } from "@/components/layout/page-chrome";
 import { formatKg, formatWhen, MillSelect, MillStatus, useMillLookups, type MillLookups } from "@/components/milling/mill-ui";
+import { InspectForm, InspectionResults } from "@/components/milling/inspection";
 import { RecordHistory } from "@/components/milling/record-history";
 import { useMillAccess } from "@/components/milling/use-mill-access";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionTab, SectionTabs } from "@/components/ui/section-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchJson, getApiErrorMessage } from "@/lib/api-client";
@@ -56,7 +56,6 @@ type Detail = {
   exceptions: Array<{ id: string; code: string; title: string; status: string; decision: string | null; decisionNote: string | null }>;
 };
 
-const METHOD_LABEL: Record<string, string> = { VISUAL: "Visual", INSTRUMENT: "Instrument", NOT_PERFORMED: "Not performed" };
 
 /** One delivery: what came in, QC, the decision, and its history. */
 export default function IntakeDetailPage() {
@@ -157,7 +156,7 @@ function DeliveryAndQc({ detail, lookups }: { detail: Detail; lookups: MillLooku
         <h2 className="text-base font-semibold">Quality</h2>
         {inspections[0] ? <InspectionResults inspection={inspections[0]} /> : <p className="text-sm text-muted-foreground">Not inspected yet.</p>}
         {open && access.can("qc.record") ? (
-          <InspectForm intakeId={intake.id} specs={lookups.specs.filter((spec) => spec.point === "INCOMING_MAIZE")} again={inspections.length > 0} />
+          <InspectForm endpoint={`/api/milling/intakes/${intake.id}/inspect`} invalidate={["milling", "intake", intake.id]} specs={lookups.specs.filter((spec) => spec.point === "INCOMING_MAIZE")} again={inspections.length > 0} />
         ) : null}
       </section>
 
@@ -173,151 +172,6 @@ function Item({ label, children }: { label: string; children: React.ReactNode })
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd>{children}</dd>
     </div>
-  );
-}
-
-function InspectionResults({ inspection }: { inspection: Detail["inspections"][number] }) {
-  return (
-    <div className="space-y-2">
-      <p className="text-sm">
-        <MillStatus status={inspection.outcome} /> <span className="text-muted-foreground">· {formatWhen(inspection.inspectedAt)}</span>
-      </p>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Check</TableHead>
-            <TableHead>Method</TableHead>
-            <TableHead className="text-right">Reading</TableHead>
-            <TableHead>Result</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {inspection.results.map((result) => (
-            <TableRow key={result.id}>
-              <TableCell>
-                {result.specName} <span className="text-xs text-muted-foreground">v{result.specVersion}</span>
-              </TableCell>
-              <TableCell>{METHOD_LABEL[result.method] ?? result.method}</TableCell>
-              <TableCell className="text-right font-mono">{result.value ?? "—"}</TableCell>
-              <TableCell>
-                <MillStatus status={result.passed === null ? "INCOMPLETE" : result.passed ? "PASS" : "FAIL"} />
-                {result.note ? <span className="text-xs text-muted-foreground"> {result.note}</span> : null}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-type Draft = { method: string; value: string; passed: "" | "yes" | "no"; note: string };
-
-function InspectForm({ intakeId, specs, again }: { intakeId: string; specs: MillLookups["specs"]; again: boolean }) {
-  const queryClient = useQueryClient();
-  const [show, setShow] = useState(!again);
-  const [drafts, setDrafts] = useState<Record<string, Draft>>(() =>
-    Object.fromEntries(specs.map((spec) => [spec.id, { method: spec.method, value: "", passed: "", note: "" }])),
-  );
-  const [error, setError] = useState<string | null>(null);
-  const save = useMutation({
-    mutationFn: () =>
-      fetchJson(`/api/milling/intakes/${intakeId}/inspect`, {
-        method: "POST",
-        body: JSON.stringify({
-          results: specs.map((spec) => {
-            const draft = drafts[spec.id];
-            return {
-              specId: spec.id,
-              method: draft.method,
-              value: spec.resultType === "NUMERIC" && draft.method !== "NOT_PERFORMED" ? draft.value : null,
-              passed: spec.resultType === "PASS_FAIL" && draft.method !== "NOT_PERFORMED" ? (draft.passed === "" ? null : draft.passed === "yes") : null,
-              note: draft.note || null,
-            };
-          }),
-        }),
-      }),
-    onSuccess: () => {
-      setShow(false);
-      void queryClient.invalidateQueries({ queryKey: ["milling", "intake", intakeId] });
-    },
-    onError: (failure) => setError(getApiErrorMessage(failure)),
-  });
-  const update = (specId: string, patch: Partial<Draft>) => setDrafts((current) => ({ ...current, [specId]: { ...current[specId], ...patch } }));
-
-  if (!show) {
-    return (
-      <Button variant="secondary" onClick={() => setShow(true)}>
-        Inspect again
-      </Button>
-    );
-  }
-  return (
-    <form
-      className="space-y-4 rounded-md border p-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setError(null);
-        save.mutate();
-      }}
-    >
-      {specs.map((spec) => {
-        const draft = drafts[spec.id];
-        const skipped = draft.method === "NOT_PERFORMED";
-        return (
-          <div key={spec.id} className="grid gap-2 sm:grid-cols-[1fr_10rem_10rem] sm:items-end">
-            <div>
-              <div className="font-medium">
-                {spec.name}
-                {spec.required ? "" : " (optional)"}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {spec.guidance}
-                {spec.maxValue !== null ? ` Limit ${spec.minValue !== null ? `${spec.minValue}–` : "≤ "}${spec.maxValue}${spec.unit ?? ""}.` : ""}
-              </div>
-            </div>
-            <MillSelect
-              value={draft.method}
-              onChange={(method) => update(spec.id, { method })}
-              options={[
-                { value: spec.method, label: METHOD_LABEL[spec.method] },
-                { value: "NOT_PERFORMED", label: "Not performed" },
-              ]}
-            />
-            {spec.resultType === "NUMERIC" ? (
-              <Input
-                aria-label={`${spec.name} reading`}
-                inputMode="decimal"
-                className="font-mono"
-                disabled={skipped}
-                placeholder={spec.unit ?? "Reading"}
-                value={draft.value}
-                onChange={(event) => update(spec.id, { value: event.target.value })}
-              />
-            ) : (
-              <MillSelect
-                value={draft.passed}
-                onChange={(passed) => update(spec.id, { passed: passed as Draft["passed"] })}
-                disabled={skipped}
-                placeholder="Pass or fail"
-                options={[
-                  { value: "yes", label: "Pass" },
-                  { value: "no", label: "Fail" },
-                ]}
-              />
-            )}
-          </div>
-        );
-      })}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      <Button type="submit" disabled={save.isPending}>
-        {save.isPending ? "Saving…" : "Save inspection"}
-      </Button>
-    </form>
   );
 }
 

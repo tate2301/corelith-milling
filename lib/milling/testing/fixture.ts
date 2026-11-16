@@ -19,6 +19,13 @@ export async function removeMill(companyId: string) {
   const where = { companyId };
   const siteIds = (await prisma.site.findMany({ where, select: { id: true } })).map((site) => site.id);
   const tables = [
+    "millingGeneratorRun",
+    "millingDowntime",
+    "millingEquipmentState",
+    "millingPackRun",
+    "millingBatch",
+    "millingShift",
+    "millingProductionOrder",
     "millingQcInspection",
     "millingStockCount",
     "millingIntake",
@@ -42,6 +49,9 @@ export async function removeMill(companyId: string) {
   const items = await prisma.inventoryItem.findMany({ where: { siteId: { in: siteIds } }, select: { id: true } });
   await prisma.stockMovement.deleteMany({ where: { itemId: { in: items.map((item) => item.id) } } });
   await prisma.inventoryItem.deleteMany({ where: { siteId: { in: siteIds } } });
+  await prisma.attendance.deleteMany({ where });
+  await prisma.workOrder.deleteMany({ where });
+  await prisma.employee.deleteMany({ where });
   await prisma.equipment.deleteMany({ where: { siteId: { in: siteIds } } });
   await prisma.stockLocation.deleteMany({ where: { siteId: { in: siteIds } } });
   await prisma.site.deleteMany({ where });
@@ -50,4 +60,20 @@ export async function removeMill(companyId: string) {
   await prisma.idSequence.deleteMany({ where });
   await prisma.user.deleteMany({ where });
   await prisma.company.delete({ where: { id: companyId } });
+}
+
+/** An employee on the mill's books, for crews. */
+export async function makeEmployee(companyId: string, name: string) {
+  return prisma.employee.create({
+    data: {
+      companyId,
+      employeeId: `E-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      phone: "+263770000000",
+      nextOfKinName: "Kin",
+      nextOfKinPhone: "+263770000001",
+      passportPhotoUrl: "",
+      villageOfOrigin: "Norton",
+    },
+  });
 }

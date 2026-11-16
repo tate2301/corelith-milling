@@ -19,12 +19,7 @@ export function isRefusal(error: unknown): error is Error {
   return REFUSALS.some((kind) => error instanceof kind) || (error instanceof Error && error.name === "MillRefusal");
 }
 
-/** A refusal from a service added later than this list: `throw millRefusal("…")`. */
-export function millRefusal(message: string): Error {
-  const error = new Error(message);
-  error.name = "MillRefusal";
-  return error;
-}
+export { millRefusal } from "./errors";
 
 type Handler<P> = (context: MillContext, request: NextRequest, params: P) => Promise<unknown>;
 

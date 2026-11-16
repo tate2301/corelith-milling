@@ -70,7 +70,7 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "SUPERVISOR",
     name: "Production supervisor",
     description: "Allocates staff, opens and closes shifts, runs batches, approves closures and releases machines.",
-    capabilities: ["plan.edit", "shift.manage", "shift.approve", "batch.run", "batch.approve", "machine.release", "stage.record", "fault.report"],
+    capabilities: ["plan.edit", "shift.manage", "shift.approve", "batch.run", "batch.approve", "machine.release", "stage.record", "fault.report", "fuel.record"],
   },
   {
     code: "STORES",
