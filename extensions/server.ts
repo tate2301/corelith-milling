@@ -1,5 +1,7 @@
 import type { ReportLoader } from "@/lib/reports/types";
 
+import { MILLING_LOADERS } from "./milling/loaders";
+
 /**
  * Server-only parts of this deployment's extensions: the report loaders,
  * which query the database. Empty in core.
@@ -14,4 +16,4 @@ import type { ReportLoader } from "@/lib/reports/types";
  * Every key must be a report its extension declares (`reports`); the report
  * registry test fails on a report without a loader or a loader without one.
  */
-export const registeredExtensionLoaders: Readonly<Record<string, ReportLoader>> = {};
+export const registeredExtensionLoaders: Readonly<Record<string, ReportLoader>> = { ...MILLING_LOADERS };

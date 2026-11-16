@@ -71,6 +71,8 @@ describe("the milling vertical", () => {
       "/milling/deliveries",
       "/milling/maintenance",
       "/milling/exceptions",
+      "/milling/trace",
+      "/milling/reports",
       "/milling/settings",
     ]);
   });

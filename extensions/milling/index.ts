@@ -1,13 +1,16 @@
 import type { CorelithExtension } from "@/lib/extensions/types";
 
+import { MILLING_REPORTS } from "./reports";
+
 /**
  * The milling vertical: a maize mill that receives grain, mills it, packs meal
  * and by-products, and sells and delivers them.
  *
- * This first version registers the vertical and nothing else: a feature, its
- * bundle, the template a mill is provisioned from, the "The mill" sidebar
- * group and its home page. Each workflow (intake, production, quality,
- * packing, despatch) adds its own feature, routes and rows here as it lands.
+ * One feature, `milling.home`, opens the whole mill to a tenant; inside it,
+ * who may do what is decided by the mill's permission groups
+ * (lib/milling/access, DECISIONS.md D3). Its reports are in `./reports.ts`
+ * and their loaders, which query, in `./loaders.ts` (registered in
+ * extensions/server.ts).
  *
  * Plain data only: this file is on the proxy's import path.
  */
@@ -92,6 +95,7 @@ export const milling: CorelithExtension = {
       ],
     },
   ],
+  reports: MILLING_REPORTS,
   product: {
     label: "Milling operations",
     workspaceLabel: "The mill",
@@ -140,6 +144,8 @@ export const milling: CorelithExtension = {
       { id: "milling.deliveries", label: "Deliveries", icon: "dispatch", href: "/milling/deliveries" },
       { id: "milling.machines", label: "Machines", icon: "job-card", href: "/milling/maintenance" },
       { id: "milling.exceptions", label: "Exceptions", icon: "alert-circle", href: "/milling/exceptions" },
+      { id: "milling.trace", label: "Trace", icon: "link", href: "/milling/trace" },
+      { id: "milling.reports", label: "Reports", icon: "chart-bar", href: "/milling/reports" },
       { id: "milling.settings", label: "Settings", icon: "checklist", href: "/milling/settings" },
     ],
   },

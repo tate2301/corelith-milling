@@ -157,3 +157,26 @@ Every record's History shows its amendments and audit events.
   Until then delivered orders are the record of what was sold. If invoicing
   belongs here, a delivered order becomes a Books sales invoice. That needs no
   new stock logic.
+
+## D11. Reporting through core's catalogue (16 Nov 2026)
+
+- **The reports** are registered in core's report catalogue (`extensions/milling/reports.ts`,
+  loaders in `./loaders.ts`), so filtering, grouping, PDF and Excel export and
+  scheduled email come from core. All are gated on `milling.home`. Tenants
+  provisioned before L5 need nothing new turned on. The catalogue hides them
+  from roles pinned elsewhere, such as a CRM sales rep.
+- **The Daily Operations Report** is the `milling-daily-operations` report. It
+  covers one mill day (Harare time) in sections: intake, production, packing,
+  people, machines, despatch, stock now and exceptions. Management receives it
+  each morning by scheduling it in Reports (PDF, daily); there is no separate
+  emailer.
+- **The mill's home** is a live dashboard of things to act on: who is on shift,
+  output against today's plan, maize free and on hold, what waits for QC,
+  machines down, deliveries, packed stock, and the exceptions queue.
+- **Trace** works from any code (lot, MI-, B-, PK- or DN-) back to suppliers and
+  forward to customers and gate sales. It uses what is already recorded, so
+  nothing extra is entered. A recall starts from the lot.
+- **Not built yet:**
+  - the *customer survey by route*. It needs a survey form, so it waits until
+    the client says what they ask on a route.
+  - *debtors*. It depends on invoicing (D10).
