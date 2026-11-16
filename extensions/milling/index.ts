@@ -129,6 +129,9 @@ export const milling: CorelithExtension = {
     label: "The mill",
     nodes: [
       { id: "milling.home", label: "Overview", icon: "home", href: "/milling" },
+      { id: "milling.intake", label: "Intake", icon: "purchase-order-check", href: "/milling/intake" },
+      { id: "milling.stock", label: "Stock", icon: "stockroom", href: "/milling/stock" },
+      { id: "milling.exceptions", label: "Exceptions", icon: "alert-circle", href: "/milling/exceptions" },
       { id: "milling.settings", label: "Settings", icon: "checklist", href: "/milling/settings" },
     ],
   },

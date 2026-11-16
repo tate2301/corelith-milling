@@ -172,3 +172,247 @@ model MillingAmendment {
 
   @@index([companyId, entityType, entityId, createdAt])
 }
+
+/// A lot: one intake of maize, one batch's output of a product, or one pack run (DECISIONS.md, D7).
+model MillingLot {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// M-YYMMDD-NN for maize; batch code + product for bulk; and so on.
+  code        String
+  /// The core Product.
+  productId   String
+  /// AVAILABLE, HOLD, REJECTED or CONSUMED.
+  status      String   @default("HOLD")
+  /// INTAKE, BATCH, PACK, OPENING or RETURN, and the record it came from.
+  originType  String
+  originId    String?
+  producedAt  DateTime @default(now())
+  /// Readings that travel with the lot, e.g. { moisturePct: 12.1, variety: "white" }.
+  attributes  Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  balances  MillingLotBalance[]
+  movements MillingLotMovement[]
+
+  @@unique([companyId, code])
+  @@index([companyId, productId, status])
+}
+
+/// How much of a lot is at one location, and how much of that is promised.
+model MillingLotBalance {
+  id              String     @id @default(uuid())
+  companyId       String
+  lotId           String
+  /// The core StockLocation (a bin, a store, the process line).
+  stockLocationId String
+  quantity        Decimal    @default(0) @db.Decimal(14, 3)
+  reserved        Decimal    @default(0) @db.Decimal(14, 3)
+  updatedAt       DateTime   @updatedAt
+
+  lot MillingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@unique([lotId, stockLocationId])
+  @@index([companyId, stockLocationId])
+}
+
+/// One change to a lot's quantity at a location, linked to core's movement when the total changed.
+model MillingLotMovement {
+  id               String     @id @default(uuid())
+  companyId        String
+  lotId            String
+  /// Where it left from and arrived at; one is null for a receipt or an issue.
+  fromLocationId   String?
+  toLocationId     String?
+  /// Always positive, in the product's unit (kg for maize and bulk, bags for packed).
+  quantity         Decimal    @db.Decimal(14, 3)
+  /// INTAKE_RECEIPT, BIN_MOVE, PRODUCTION_ISSUE, PRODUCTION_OUTPUT, PACK_ISSUE, PACK_OUTPUT,
+  /// PACK_RETURN, DESPATCH, DELIVERY_RETURN, QC_DISPOSAL, COUNT_ADJUSTMENT, OPENING.
+  reason           String
+  /// Core's StockMovement, when this changed the mill's on-hand total.
+  stockMovementId  String?
+  sourceType       String
+  sourceId         String?
+  /// Weighed or counted, or worked out.
+  isEstimated      Boolean    @default(false)
+  createdById      String
+  createdAt        DateTime   @default(now())
+
+  lot MillingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([lotId, createdAt])
+  @@index([companyId, sourceType, sourceId])
+}
+
+/// Stock promised to a production order, a batch or a customer order before it moves.
+model MillingReservation {
+  id              String   @id @default(uuid())
+  companyId       String
+  lotId           String
+  stockLocationId String
+  quantity        Decimal  @db.Decimal(14, 3)
+  sourceType      String
+  sourceId        String
+  /// ACTIVE, RELEASED or FULFILLED.
+  status          String   @default("ACTIVE")
+  createdById     String
+  createdAt       DateTime @default(now())
+  closedAt        DateTime?
+
+  @@index([companyId, status])
+  @@index([lotId, status])
+  @@index([companyId, sourceType, sourceId])
+}
+
+/// Something that went wrong and needs an authorised decision before work goes on.
+model MillingException {
+  id               String    @id @default(uuid())
+  companyId        String
+  /// EX-YYMMDD-NN.
+  code             String
+  /// QC_FAIL, QC_NOT_PERFORMED, BREAKDOWN, STOCK_DISCREPANCY, RECONCILIATION_VARIANCE,
+  /// OVER_CAPACITY, DELIVERY_SHORTAGE, DAMAGE.
+  type             String
+  /// LOW, MEDIUM or HIGH.
+  severity         String    @default("MEDIUM")
+  /// A blocking exception stops the next step on its record until it is decided.
+  blocking         Boolean   @default(true)
+  /// The record it is about: its kind ("MillingIntake", "MillingLot"...) and id.
+  targetType       String
+  targetId         String
+  title            String
+  detail           String?
+  /// The decisions it allows, e.g. ["ACCEPT", "HOLD", "REJECT"].
+  allowedDecisions String[]
+  /// OPEN or DECIDED.
+  status           String    @default("OPEN")
+  decision         String?
+  decisionNote     String?
+  decidedById      String?
+  decidedAt        DateTime?
+  raisedById       String?
+  createdAt        DateTime  @default(now())
+
+  @@unique([companyId, code])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, targetType, targetId])
+}
+
+/// A delivery of maize: who brought it, what it weighed and how, and what QC decided.
+model MillingIntake {
+  id              String    @id @default(uuid())
+  companyId       String
+  /// MI-YYMMDD-NN.
+  code            String
+  /// The core Vendor, when the supplier is on file; the name is kept either way.
+  supplierId      String?
+  supplierName    String
+  /// The core Product received, normally white maize.
+  productId       String
+  deliveryRef     String?
+  vehicleReg      String?
+  driverName      String?
+  variety         String?
+  /// BAG_COUNT, EXTERNAL_TICKET or SUPPLIER_DECLARED.
+  weighMethod     String
+  bags            Int?
+  bagKg           Decimal?  @db.Decimal(8, 2)
+  grossKg         Decimal?  @db.Decimal(12, 2)
+  tareKg          Decimal?  @db.Decimal(12, 2)
+  netKg           Decimal   @db.Decimal(12, 2)
+  ticketNumber    String?
+  /// An upload of the ticket or delivery note.
+  ticketFileUrl   String?
+  /// PROVISIONAL until a weighbridge ticket confirms it; VERIFIED after.
+  weightStatus    String    @default("PROVISIONAL")
+  /// AWAITING_QC, HELD, ACCEPTED, REJECTED or CANCELLED.
+  status          String    @default("AWAITING_QC")
+  /// The bin or store it goes into on acceptance.
+  binLocationId   String?
+  lotId           String?
+  notes           String?
+  receivedAt      DateTime  @default(now())
+  receivedById    String
+  decidedById     String?
+  decidedAt       DateTime?
+  decisionNote    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status, receivedAt])
+}
+
+/// One inspection: of an intake, or of a lot of product before release.
+model MillingQcInspection {
+  id            String    @id @default(uuid())
+  companyId     String
+  /// INCOMING_MAIZE or FINISHED_PRODUCT.
+  point         String
+  /// "MillingIntake" or "MillingLot", and its id.
+  targetType    String
+  targetId      String
+  inspectedById String
+  inspectedAt   DateTime  @default(now())
+  /// PASS when every required check passed; FAIL or INCOMPLETE otherwise.
+  outcome       String
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  results MillingQcResult[]
+
+  @@index([companyId, targetType, targetId])
+  @@index([companyId, point, inspectedAt])
+}
+
+/// One check's result, judged against the version of the check in force.
+model MillingQcResult {
+  id           String   @id @default(uuid())
+  inspectionId String
+  specId       String
+  specVersion  Int
+  specCode     String
+  specName     String
+  /// VISUAL, INSTRUMENT or NOT_PERFORMED. Not performed is never a pass.
+  method       String
+  value        Decimal? @db.Decimal(12, 3)
+  passed       Boolean?
+  note         String?
+
+  inspection MillingQcInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+}
+
+/// A count of one location: what was found in each lot against what the ledger said.
+model MillingStockCount {
+  id              String    @id @default(uuid())
+  companyId       String
+  /// SC-YYMMDD-NN.
+  code            String
+  stockLocationId String
+  /// POSTED when every line is within tolerance or the variance was approved; AWAITING_DECISION otherwise; DISCARDED.
+  status          String
+  countedById     String
+  countedAt       DateTime  @default(now())
+  postedAt        DateTime?
+  notes           String?
+
+  lines MillingStockCountLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, countedAt])
+}
+
+model MillingStockCountLine {
+  id       String  @id @default(uuid())
+  countId  String
+  lotId    String
+  expected Decimal @db.Decimal(14, 3)
+  counted  Decimal @db.Decimal(14, 3)
+
+  count MillingStockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+
+  @@index([countId])
+}
