@@ -40,6 +40,8 @@ export const MILLING_REPORTS: ReportDefinition[] = [
       { key: "unit", label: "Unit", kind: "text" },
     ],
     defaults: { groupBy: "section" },
+    // A page to read, not a chart: each row is a different measure.
+    layout: { blocks: [{ id: "lead", type: "text", text: "The mill's day, section by section. Stock is as it stands now." }, { id: "table", type: "table" }] },
   },
   {
     ...base,
@@ -207,6 +209,8 @@ export const MILLING_REPORTS: ReportDefinition[] = [
       { key: "unit", label: "Unit", kind: "text" },
     ],
     defaults: {},
+    // Units differ from row to row, so a chart across them would mislead.
+    layout: { blocks: [{ id: "table", type: "table" }] },
   },
   {
     ...base,
