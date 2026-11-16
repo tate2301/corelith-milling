@@ -64,7 +64,7 @@ describe("the milling vertical", () => {
   it("offers the mill's equipment categories to maintenance", () => {
     const categories = resolveVerticalDefaults({ workspaceProfile: "GENERAL", enabledFeatures: provisioned }).maintenance
       .equipmentCategories;
-    expect(categories).toEqual(expect.arrayContaining(["ROLLER_MILL", "DEGERMINATOR", "PACKER", "WEIGHBRIDGE"]));
+    expect(categories).toEqual(expect.arrayContaining(["ROLLER_MILL", "DEGERMINATOR", "SIFT_BOX", "VEHICLE"]));
     expect(categories.at(-1)).toBe("OTHER");
   });
 });
