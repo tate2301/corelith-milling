@@ -101,17 +101,27 @@ export const milling: CorelithExtension = {
     foundationalModules: ["people", "payroll", "accounting"],
   },
   defaults: {
+    // The plant, in process order (lib/milling/setup/mill.ts), then the fleet
+    // and the generator. VEHICLE and POWER are declared here too: with
+    // Zimbabwe payroll on, core reads a GENERAL workspace's defaults as the
+    // payroll bureau's, whose list lacks them.
     equipmentCategories: [
-      "CLEANER",
-      "CONDITIONING_BIN",
+      "AUGER",
+      "PRE_CLEANER",
+      "DESTONER",
+      "CONDITIONING",
+      "BIN",
       "DEGERMINATOR",
+      "ASPIRATOR",
+      "ELEVATOR",
+      "PNEUMATIC_CONVEYOR",
+      "AIRLOCK",
       "ROLLER_MILL",
-      "HAMMER_MILL",
-      "SIFTER",
-      "SILO",
-      "PACKER",
+      "SIFT_BOX",
       "SEWING_MACHINE",
-      "WEIGHBRIDGE",
+      "INSTRUMENT",
+      "VEHICLE",
+      "POWER",
     ],
   },
   nav: {
