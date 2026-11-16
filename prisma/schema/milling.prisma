@@ -155,3 +155,20 @@ model MillingPackRecipe {
 
   @@index([companyId])
 }
+
+/// One field of a submitted or approved mill record, changed with a reason (DECISIONS.md, D8).
+model MillingAmendment {
+  id         String   @id @default(uuid())
+  companyId  String
+  /// The record's kind, e.g. "MillingIntake".
+  entityType String
+  entityId   String
+  field      String
+  oldValue   Json?
+  newValue   Json?
+  reason     String
+  amendedById String
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, entityType, entityId, createdAt])
+}

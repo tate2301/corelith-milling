@@ -51,3 +51,52 @@ environment change, plus a slug change if they want `erp`.
 The client has no lab and only a moisture meter. QC methods are Visual,
 Instrument and Not performed. An external lab result can be added later as a
 method without changing what is recorded today.
+
+## D6. Seed sensible defaults where the client has not answered yet (16 Nov 2026)
+
+The seed fills what the client has not confirmed with a reasonable starting
+point, all editable at Mill settings:
+
+- seven shift duties named after the process (supervisor, intake and cleaning,
+  conditioning, degermination, roller mills and sifting, packing, sewing and
+  stacking);
+- a moisture limit of 12.5% for incoming maize;
+- a reconciliation tolerance of 2% and an intake bag weight of 50 kg;
+- vehicles with no registration, capacity or driver;
+- pack recipes with no thread per bag.
+
+Until a vehicle has a capacity, loading it is not checked against one. Until a
+recipe has thread per bag, packing does not issue thread.
+
+## D7. Lots live in a fork ledger written in core's stock transaction (16 Nov 2026)
+
+The question before L2: core's `recordStockMovement` is the only writer of
+stock, and the mill needs quantities by lot and by bin.
+
+**Decision:** option (a), no core change. `recordStockMovement` already takes a
+transaction (`tx`), so every milling stock change goes through one fork service
+(`lib/milling/stock/ledger.ts`). In one transaction, that service:
+
+1. calls `recordStockMovement` with the transaction, so core's on-hand total,
+   its movement row, costing and the GL work exactly as today;
+2. writes the mill's own movement against a lot and a bin, linked to core's
+   movement by id;
+3. updates the lot's balance at that bin, refusing to go below zero and refusing
+   to issue from a lot on hold or rejected (except to dispose of it).
+
+**The invariant:** for each product at the mill, the sum of lot balances equals
+core's on-hand figure. A change made outside the mill, for example a count in
+Stores, breaks it on purpose. The mill's stock screen shows the difference as
+"not in a lot" for someone to place, so nothing is silently wrong.
+
+Location kinds, bin capacity, vehicle details and equipment availability live
+in fork profile tables keyed by the core id (`MillingLocationProfile`,
+`MillingVehicleProfile`, and later `MillingEquipmentState`).
+
+## D8. Corrections are amendments, never edits (16 Nov 2026)
+
+A mill record is edited freely while it is a draft. Once submitted or approved,
+it changes only through an amendment: a reason, plus each field's old and new
+value, kept in `MillingAmendment` and on the audit chain. Stock is never
+amended: a stock correction is a reversal and a new movement, as in core.
+Every record's History shows its amendments and audit events.
