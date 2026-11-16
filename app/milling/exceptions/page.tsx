@@ -49,7 +49,8 @@ const DECISION_LABEL: Record<string, string> = {
   STOP: "Stop",
   REDUCE_LOAD: "Reduce the load",
   ACCEPT_SHORTAGE: "Accept the shortage",
-  CLAIM: "Claim from the driver",
+  CLAIM: "Claim it back",
+  WRITE_OFF: "Write it off",
 };
 
 /** Everything waiting for an authorised decision, oldest first; and what was decided. */

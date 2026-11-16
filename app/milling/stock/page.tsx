@@ -9,6 +9,8 @@ import { Fragment, useState } from "react";
 import { PageChrome } from "@/components/layout/page-chrome";
 import { formatQty, formatWhen, MillSelect, MillStatus, useMillLookups } from "@/components/milling/mill-ui";
 import { useMillAccess } from "@/components/milling/use-mill-access";
+import { useMillPost } from "@/components/milling/use-mill-post";
+import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -69,6 +71,7 @@ export default function MillStockPage() {
                 <Link href="/milling/stock/count">Count a location</Link>
               </Button>
             ) : null}
+            {access.can("stock.move") ? <MatchGateSales /> : null}
             {access.can("stock.adjust.approve") ? <OpeningStock /> : null}
           </div>
         </div>
@@ -380,5 +383,23 @@ function OpeningStock() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** The gate till sells through core's retail module; this takes those sales off the lots, oldest first. */
+function MatchGateSales() {
+  const { toast } = useToast();
+  const match = useMillPost<{ matched: number; unmatchedQuantity: number }>({
+    onDone: (result) =>
+      toast({
+        title: result.matched ? `Matched ${result.matched} till sale${result.matched === 1 ? "" : "s"}` : "Every till sale is already matched",
+        description: result.unmatchedQuantity ? `${result.unmatchedQuantity} could not be matched and shows as not in a lot.` : undefined,
+        variant: "success",
+      }),
+  });
+  return (
+    <Button variant="secondary" disabled={match.pending} onClick={() => match.post("/api/milling/gate-sales")}>
+      Match gate sales
+    </Button>
   );
 }

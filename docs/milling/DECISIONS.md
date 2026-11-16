@@ -125,3 +125,35 @@ Every record's History shows its amendments and audit events.
   the mill later keeps diesel in Stores, runs can issue it from there.
 - Costing (first pass): a batch records the value of its maize at the stock
   line's cost when issued. Full costing of outputs is left to reporting (L5).
+
+## D10. Distribution, gate sales and invoicing (16 Nov 2026)
+
+- **Orders and reservations.** A customer order is for packed bags.
+  Confirming it reserves them oldest lot first, and refuses an order that
+  released stock cannot meet.
+- **Loading.** Loading puts the order's reserved bags on a truck, line by lot.
+  Load weight is bags × each product's net weight.
+- **Over capacity.** An overloaded truck is refused at dispatch and an
+  exception is raised. Once the load is reduced, dispatch settles that
+  exception itself ("load reduced"). There is no override for an overloaded
+  truck: that is a safety rule, not a judgement call.
+- **Dispatch.** Dispatch takes the bags off stock. The driver records proof of
+  delivery on their phone: delivered, damaged and returned bags per line; who
+  received it; and where.
+  - Bags neither delivered, damaged nor returned are short.
+  - Short and damaged bags raise exceptions, decided as written off or claimed.
+  - Returned bags go into a new lot on hold for QC.
+- **Closing.** A delivery closes only when its exceptions are decided, and it
+  records the odometer back and the fuel used. An order delivered in full
+  becomes Delivered.
+- **Gate sales** use core's retail till, fiscalised with ZIMRA.
+  - The mill's template keeps the till off. Turning on `retail.pos` and
+    `portal.pos` for the tenant, and registering the fiscal device, is the
+    switch on go-live day.
+  - A till sale moves core's stock. "Match gate sales" then takes it off the
+    lots, oldest first, once per sale.
+  - Refunds and voids are left for a count to settle.
+- **Invoicing and debtors** wait for the client's answer (open question 10).
+  Until then delivered orders are the record of what was sold. If invoicing
+  belongs here, a delivered order becomes a Books sales invoice. That needs no
+  new stock logic.

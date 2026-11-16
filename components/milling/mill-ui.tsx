@@ -82,6 +82,9 @@ export interface MillLookups {
   vendors: Array<{ id: string; name: string }>;
   specs: Array<{ id: string; point: string; code: string; name: string; method: string; resultType: string; unit: string | null; minValue: number | null; maxValue: number | null; guidance: string | null; required: boolean; version: number }>;
   defaultIntakeBagKg: number;
+  customers: Array<{ id: string; name: string }>;
+  destinations: Array<{ id: string; name: string }>;
+  vehicles: Array<{ id: string; equipmentCode: string; name: string; registrationNumber: string | null; capacityKg: number | null; driverUserId: string | null }>;
 }
 
 export function useMillLookups() {

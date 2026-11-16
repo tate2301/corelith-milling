@@ -231,7 +231,8 @@ model MillingLotMovement {
   /// INTAKE_RECEIPT, BIN_MOVE, PRODUCTION_ISSUE, PRODUCTION_OUTPUT, PACK_ISSUE, PACK_OUTPUT,
   /// PACK_RETURN, DESPATCH, DELIVERY_RETURN, QC_DISPOSAL, COUNT_ADJUSTMENT, OPENING.
   reason           String
-  /// Core's StockMovement, when this changed the mill's on-hand total.
+  /// Core's StockMovement, when this changed the mill's on-hand total, or the
+  /// till's sale this matched (GATE_SALE), so a sale is never matched twice.
   stockMovementId  String?
   sourceType       String
   sourceId         String?
@@ -245,6 +246,7 @@ model MillingLotMovement {
   @@index([companyId, createdAt])
   @@index([lotId, createdAt])
   @@index([companyId, sourceType, sourceId])
+  @@index([stockMovementId])
 }
 
 /// Stock promised to a production order, a batch or a customer order before it moves.
@@ -689,4 +691,102 @@ model MillingGeneratorRun {
   createdAt    DateTime  @default(now())
 
   @@index([companyId, startedAt])
+}
+
+/// A customer's order for packed product. Confirming it reserves bags, oldest lot first.
+model MillingCustomerOrder {
+  id            String    @id @default(uuid())
+  companyId     String
+  /// CO-YYMMDD-NN.
+  code          String
+  /// The core Customer.
+  customerId    String
+  destinationId String?
+  requiredDate  DateTime? @db.Date
+  /// DRAFT, CONFIRMED, IN_DELIVERY, DELIVERED, CLOSED or CANCELLED.
+  status        String    @default("DRAFT")
+  notes         String?
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lines MillingCustomerOrderLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+}
+
+model MillingCustomerOrderLine {
+  id        String   @id @default(uuid())
+  orderId   String
+  /// A packed core Product (unit BAG).
+  productId String
+  bags      Int
+  unitPrice Decimal? @db.Decimal(12, 2)
+
+  order MillingCustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// A trip: a truck, a driver, a destination, and the bags loaded on it.
+model MillingDelivery {
+  id                 String    @id @default(uuid())
+  companyId          String
+  /// DN-YYMMDD-NN.
+  code               String
+  /// The core Equipment (category VEHICLE).
+  vehicleId          String
+  /// The core User who drives; they record proof of delivery on their phone.
+  driverId           String?
+  destinationId      String?
+  /// PLANNED, LOADING, DISPATCHED, DELIVERED (awaiting reconciliation) or CLOSED; or CANCELLED.
+  status             String    @default("PLANNED")
+  loadKg             Decimal   @default(0) @db.Decimal(12, 2)
+  odometerOut        Decimal?  @db.Decimal(10, 1)
+  odometerIn         Decimal?  @db.Decimal(10, 1)
+  fuelLitres         Decimal?  @db.Decimal(8, 2)
+  dispatchedAt       DateTime?
+  deliveredAt        DateTime?
+  closedAt           DateTime?
+  /// Proof of delivery: who received it, a signature or photo, and where.
+  receivedBy         String?
+  signatureUrl       String?
+  photoUrl           String?
+  latitude           Decimal?  @db.Decimal(9, 6)
+  longitude          Decimal?  @db.Decimal(9, 6)
+  notes              String?
+  createdById        String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  lines MillingDeliveryLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([driverId, status])
+}
+
+/// Bags of one lot on a delivery for one order line, and what became of them.
+model MillingDeliveryLine {
+  id              String   @id @default(uuid())
+  deliveryId      String
+  orderId         String
+  orderLineId     String
+  productId       String
+  lotId           String
+  stockLocationId String
+  reservationId   String?
+  bags            Int
+  deliveredBags   Int?
+  shortBags       Int      @default(0)
+  damagedBags     Int      @default(0)
+  returnedBags    Int      @default(0)
+  /// The lot returned bags went into, on hold for QC.
+  returnLotId     String?
+
+  delivery MillingDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@index([orderId])
 }

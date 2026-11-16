@@ -39,6 +39,7 @@ export type LotReason =
   | "RETURN_TO_SUPPLIER"
   | "COUNT_ADJUSTMENT"
   | "WEIGHT_CORRECTION"
+  | "GATE_SALE"
   | "BIN_MOVE";
 
 /** Issues allowed from a lot on hold or rejected: getting rid of it. */
@@ -470,4 +471,45 @@ export async function issueOldestFirst(
     left = left.minus(take);
   }
   return movements;
+}
+
+/**
+ * Take a sale that core has already recorded off the mill's lots, oldest
+ * first, without telling core again: the gate till sells through core's retail
+ * module, which moves core's total itself. Each lot movement carries the
+ * till's movement id, so a sale is matched once. Returns what could not be
+ * matched (no free stock in lots), which then shows as "not in a lot".
+ */
+export async function matchCoreIssue(
+  tx: Tx,
+  args: { companyId: string; userId: string; productId: string; quantity: Qty; stockMovementId: string; reference?: string | null },
+) {
+  let left = dec(args.quantity);
+  const balances = await tx.millingLotBalance.findMany({
+    where: { companyId: args.companyId, lot: { productId: args.productId, status: "AVAILABLE" }, quantity: { gt: 0 } },
+    include: { lot: { select: { producedAt: true } } },
+  });
+  balances.sort((a, b) => a.lot.producedAt.getTime() - b.lot.producedAt.getTime());
+  for (const balance of balances) {
+    if (left.lte(0)) break;
+    const take = Prisma.Decimal.min(balance.quantity.minus(balance.reserved), left);
+    if (take.lte(0)) continue;
+    await tx.millingLotBalance.update({ where: { id: balance.id }, data: { quantity: { decrement: take } } });
+    await tx.millingLotMovement.create({
+      data: {
+        companyId: args.companyId,
+        lotId: balance.lotId,
+        fromLocationId: balance.stockLocationId,
+        quantity: take,
+        reason: "GATE_SALE",
+        stockMovementId: args.stockMovementId,
+        sourceType: "GateSale",
+        sourceId: args.reference ?? null,
+        createdById: args.userId,
+      },
+    });
+    await markConsumedIfEmpty(tx, balance.lotId);
+    left = left.minus(take);
+  }
+  return left;
 }

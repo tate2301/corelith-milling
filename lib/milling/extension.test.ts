@@ -67,6 +67,8 @@ describe("the milling vertical", () => {
       "/milling/quality",
       "/milling/packing",
       "/milling/stock",
+      "/milling/orders",
+      "/milling/deliveries",
       "/milling/maintenance",
       "/milling/exceptions",
       "/milling/settings",

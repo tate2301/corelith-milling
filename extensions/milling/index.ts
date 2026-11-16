@@ -136,6 +136,8 @@ export const milling: CorelithExtension = {
       { id: "milling.quality", label: "Quality", icon: "seal-check", href: "/milling/quality" },
       { id: "milling.packing", label: "Packing", icon: "checks", href: "/milling/packing" },
       { id: "milling.stock", label: "Stock", icon: "stockroom", href: "/milling/stock" },
+      { id: "milling.orders", label: "Orders", icon: "purchase-order", href: "/milling/orders" },
+      { id: "milling.deliveries", label: "Deliveries", icon: "dispatch", href: "/milling/deliveries" },
       { id: "milling.machines", label: "Machines", icon: "job-card", href: "/milling/maintenance" },
       { id: "milling.exceptions", label: "Exceptions", icon: "alert-circle", href: "/milling/exceptions" },
       { id: "milling.settings", label: "Settings", icon: "checklist", href: "/milling/settings" },
