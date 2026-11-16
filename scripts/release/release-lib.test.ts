@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   coreTagsAfter,
   describeCommit,
+  forkFlavourFromDoc,
   latestCoreTag,
   latestForkTag,
   migrationsFromDiff,
@@ -10,6 +11,14 @@ import {
   nextForkVersion,
   releaseNotes,
 } from "./release-lib.mjs";
+
+describe("the fork's flavour", () => {
+  it("is read from FORK.md's first heading, and is null for core", () => {
+    expect(forkFlavourFromDoc("# tate2301/corelith-milling: the milling fork of Corelith\n\nText.")).toBe("milling");
+    expect(forkFlavourFromDoc("# Something else")).toBeNull();
+    expect(forkFlavourFromDoc(null)).toBeNull();
+  });
+});
 
 describe("core versions", () => {
   it("starts the month at 1 and counts up within it", () => {

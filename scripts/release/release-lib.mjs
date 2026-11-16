@@ -26,6 +26,15 @@ export function assertFlavour(flavour) {
   }
 }
 
+/**
+ * The flavour a fork's FORK.md names: it opens "# owner/name: the <flavour>
+ * fork of Corelith". Null for core, which has no FORK.md.
+ */
+export function forkFlavourFromDoc(text) {
+  if (text == null) return null;
+  return /^# \S+: the ([a-z0-9-]+) fork of Corelith/m.exec(text)?.[1] ?? null;
+}
+
 function parseCore(tag) {
   const match = CORE_TAG.exec(tag);
   if (!match) return null;
