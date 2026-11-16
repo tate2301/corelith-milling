@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 import {
+  forkFlavourFromDoc,
   latestCoreTag,
   latestForkTag,
   nextCoreVersion,
@@ -35,10 +36,8 @@ const flavour = flavourIndex >= 0 ? args[flavourIndex + 1] : process.env.FORK_FL
 const remoteIndex = args.indexOf("--remote");
 const remote = remoteIndex >= 0 ? args[remoteIndex + 1] : "origin";
 
-/** A fork's FORK.md opens "# owner/name: the <flavour> fork of Corelith"; core has no FORK.md. */
 function flavourFromForkDoc() {
-  if (!existsSync("FORK.md")) return null;
-  return /^# \S+: the ([a-z0-9-]+) fork of Corelith/m.exec(readFileSync("FORK.md", "utf8"))?.[1] ?? null;
+  return forkFlavourFromDoc(existsSync("FORK.md") ? readFileSync("FORK.md", "utf8") : null);
 }
 
 function git(...gitArgs) {
