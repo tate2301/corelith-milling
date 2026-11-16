@@ -43,7 +43,7 @@ export default function ShiftPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<"crew" | "work" | "history">("crew");
   const query = useQuery({ queryKey: ["milling", "shift", id], queryFn: () => fetchJson<Detail>(`/api/milling/shifts/${id}`) });
-  if (query.isLoading || !query.data) return <Skeleton className="m-4 h-96" />;
+  if (query.isPending || !query.data) return <Skeleton className="m-4 h-96" />;
   const { shift } = query.data;
   return (
     <>
@@ -88,7 +88,7 @@ function Crew({ detail }: { detail: Detail }) {
   return (
     <div className="space-y-3">
       <FormError error={save.error} />
-      <Table>
+      <Table hideControlsWhenSinglePage>
         <TableHeader>
           <TableRow>
             <TableHead>Person</TableHead>

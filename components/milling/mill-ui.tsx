@@ -33,6 +33,8 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   COMPLETED: { label: "Completed", tone: "passing" },
   CLOSED: { label: "Closed", tone: "inactive" },
   PLANNED: { label: "Planned", tone: "pending" },
+  TO_DO: { label: "To do", tone: "pending" },
+  OPTIONAL: { label: "Optional", tone: "inactive" },
   AWAITING_QC_RELEASE: { label: "Awaiting QC", tone: "in_review" },
   // Distribution (L4)
   LOADING: { label: "Loading", tone: "in_progress" },

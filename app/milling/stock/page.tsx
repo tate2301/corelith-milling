@@ -84,7 +84,7 @@ function OnHand({ focusLot }: { focusLot: string | null }) {
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [moving, setMoving] = useState<{ lot: Lot; product: ProductStock } | null>(null);
 
-  if (query.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending) return <Skeleton className="h-64 w-full" />;
   if (query.isError) {
     return (
       <Alert variant="destructive">
@@ -98,7 +98,7 @@ function OnHand({ focusLot }: { focusLot: string | null }) {
 
   return (
     <>
-      <Table>
+      <Table hideControlsWhenSinglePage>
         <TableHeader>
           <TableRow>
             <TableHead>Product</TableHead>
@@ -251,10 +251,10 @@ function Movements({ lotId }: { lotId: string | null }) {
         `/api/milling/stock/movements${lotId ? `?lotId=${lotId}` : ""}`,
       ),
   });
-  if (query.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending) return <Skeleton className="h-64 w-full" />;
   if (!query.data?.length) return <EmptyState title="No movements yet" body="Every receipt, move, issue and count appears here." />;
   return (
-    <Table>
+    <Table hideControlsWhenSinglePage>
       <TableHeader>
         <TableRow>
           <TableHead>When</TableHead>
@@ -292,10 +292,10 @@ function Counts() {
     queryFn: () =>
       fetchJson<Array<{ id: string; code: string; status: string; countedAt: string; location: { code: string; name: string } | null; lines: Array<{ expected: number; counted: number }> }>>("/api/milling/stock/counts"),
   });
-  if (query.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending) return <Skeleton className="h-64 w-full" />;
   if (!query.data?.length) return <EmptyState title="No counts yet" body="Count a location to check the ledger against what is there." />;
   return (
-    <Table>
+    <Table hideControlsWhenSinglePage>
       <TableHeader>
         <TableRow>
           <TableHead>Count</TableHead>

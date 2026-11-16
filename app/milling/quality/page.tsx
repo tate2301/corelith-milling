@@ -40,7 +40,7 @@ export default function MillQualityPage() {
         <p className="text-sm text-muted-foreground">
           Maize is inspected on its delivery, under <Link className="underline" href="/milling/intake">Intake</Link>.
         </p>
-        {query.isLoading ? (
+        {query.isPending ? (
           <Skeleton className="h-64 w-full" />
         ) : !query.data?.length ? (
           <EmptyState title={status === "HOLD" ? "Nothing is waiting for QC" : "No released lots"} body="Bulk product from each batch appears here on hold." />

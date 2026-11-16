@@ -113,13 +113,13 @@ export function SettingsResourceView({ resource }: { resource: SettingsResource 
         <Alert variant="destructive">
           <AlertDescription>{getApiErrorMessage(query.error)}</AlertDescription>
         </Alert>
-      ) : query.isLoading ? (
+      ) : query.isPending ? (
         <Skeleton className="h-48 w-full" />
       ) : rows.length === 0 ? (
         <EmptyState title={`No ${resource.label.toLowerCase()} yet`} body={resource.canCreate ? `Add the first ${resource.singular}.` : resource.description} />
       ) : (
         <div className="overflow-x-auto">
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 {columns.map((field) => (

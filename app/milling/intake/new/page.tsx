@@ -63,7 +63,7 @@ export default function NewIntakePage() {
     onError: (failure) => setError(getApiErrorMessage(failure)),
   });
 
-  if (lookups.isLoading) return <Skeleton className="m-4 h-96 max-w-lg" />;
+  if (lookups.isPending) return <Skeleton className="m-4 h-96 max-w-lg" />;
   const stores = (lookups.data?.locations ?? []).filter((location) => ["STORE", "BIN", "SILO", "DOCK"].includes(location.kind));
 
   return (

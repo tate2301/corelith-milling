@@ -24,7 +24,7 @@ export function RecordHistory({ entityType, entityId }: { entityType: string; en
         `/api/milling/history?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`,
       ),
   });
-  if (query.isLoading) return <Skeleton className="h-32 w-full" />;
+  if (query.isPending) return <Skeleton className="h-32 w-full" />;
   const entries = query.data ?? [];
   if (!entries.length) return <EmptyState title="Nothing has happened to this record yet" body="Approvals, corrections and changes appear here." />;
   return (

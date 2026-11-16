@@ -41,12 +41,12 @@ export default function MillProductionPage() {
           </SectionTabs>
           {access.can("batch.run") ? <StartBatch onStarted={(id) => router.push(`/milling/production/${id}`)} /> : null}
         </div>
-        {query.isLoading ? (
+        {query.isPending ? (
           <Skeleton className="h-64 w-full" />
         ) : !query.data?.length ? (
           <EmptyState title={status === "ACTIVE" ? "No batch is running" : "No completed batches yet"} body="Start a batch on an open shift, from an approved order." />
         ) : (
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 <TableHead>Batch</TableHead>

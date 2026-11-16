@@ -77,7 +77,7 @@ export default function MillExceptionsPage() {
           <Alert variant="destructive">
             <AlertDescription>{getApiErrorMessage(query.error)}</AlertDescription>
           </Alert>
-        ) : query.isLoading ? (
+        ) : query.isPending ? (
           <Skeleton className="h-64 w-full" />
         ) : !query.data?.rows.length ? (
           <EmptyState title={status === "OPEN" ? "Nothing is waiting for a decision" : "No decisions yet"} body="Failed checks, count differences, breakdowns and delivery shortages appear here." />

@@ -42,7 +42,7 @@ export default function BatchPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<"batch" | "history">("batch");
   const query = useQuery({ queryKey: ["milling", "batch", id], queryFn: () => fetchJson<Detail>(`/api/milling/batches/${id}`) });
-  if (query.isLoading || !query.data) return <Skeleton className="m-4 h-96" />;
+  if (query.isPending || !query.data) return <Skeleton className="m-4 h-96" />;
   const { batch } = query.data;
   return (
     <>
@@ -142,7 +142,7 @@ function BatchBody({ detail }: { detail: Detail }) {
                   ))}
                 </div>
                 <div className="flex items-center gap-2">
-                  <MillStatus status={done.length ? "COMPLETED" : step.required ? "PLANNED" : "INACTIVE"} />
+                  <MillStatus status={done.length ? "COMPLETED" : step.required ? "TO_DO" : "OPTIONAL"} />
                   {working && access.can("stage.record") ? (
                     <Button size="sm" variant="secondary" onClick={() => setStage(step)}>
                       Record
@@ -162,7 +162,7 @@ function BatchBody({ detail }: { detail: Detail }) {
           {working && access.can("stage.record") ? <RecordOutput batchId={batch.id} /> : null}
         </div>
         {outputs.length ? (
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 <TableHead>Product</TableHead>

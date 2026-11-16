@@ -51,7 +51,7 @@ export default function CountLocationPage() {
     onError: (failure) => setError(getApiErrorMessage(failure)),
   });
 
-  if (lookups.isLoading || stock.isLoading) return <Skeleton className="m-4 h-64 max-w-lg" />;
+  if (lookups.isPending || stock.isPending) return <Skeleton className="m-4 h-64 max-w-lg" />;
   const complete = lines.length > 0 && lines.every((line) => (counted[line.lotId] ?? "").trim() !== "");
 
   return (

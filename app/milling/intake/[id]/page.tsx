@@ -64,7 +64,7 @@ export default function IntakeDetailPage() {
   const query = useQuery({ queryKey: ["milling", "intake", id], queryFn: () => fetchJson<Detail>(`/api/milling/intakes/${id}`) });
   const lookups = useMillLookups();
 
-  if (query.isLoading || lookups.isLoading) return <Skeleton className="m-4 h-96" />;
+  if (query.isPending || lookups.isPending) return <Skeleton className="m-4 h-96" />;
   if (query.isError || !query.data) {
     return (
       <Alert variant="destructive" className="m-4">

@@ -70,12 +70,12 @@ function Board() {
   const access = useMillAccess();
   const act = useMillPost({ done: "Saved" });
   const query = useQuery({ queryKey: ["milling", "equipment"], queryFn: () => fetchJson<Machine[]>("/api/milling/equipment") });
-  if (query.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending) return <Skeleton className="h-64 w-full" />;
   if (!query.data?.length) return <EmptyState title="No machines at the mill" body="Machines are added under Maintenance › Equipment." />;
   return (
     <>
       <FormError error={act.error} />
-      <Table>
+      <Table hideControlsWhenSinglePage>
         <TableHeader>
           <TableRow>
             <TableHead>Machine</TableHead>
@@ -123,12 +123,12 @@ function Stops() {
   const access = useMillAccess();
   const act = useMillPost({ done: "Stop ended" });
   const query = useQuery({ queryKey: ["milling", "downtime"], queryFn: () => fetchJson<Stop[]>("/api/milling/downtime") });
-  if (query.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending) return <Skeleton className="h-64 w-full" />;
   if (!query.data?.length) return <EmptyState title="No stops recorded" body="Breakdowns, power cuts and waits for material appear here with their hours." />;
   return (
     <>
       <FormError error={act.error} />
-      <Table>
+      <Table hideControlsWhenSinglePage>
         <TableHeader>
           <TableRow>
             <TableHead>Started</TableHead>
@@ -236,12 +236,12 @@ function Generator() {
         </div>
       ) : null}
       <FormError error={save.error} />
-      {query.isLoading ? (
+      {query.isPending ? (
         <Skeleton className="h-48 w-full" />
       ) : !query.data?.length ? (
         <EmptyState title="No generator runs" body="Each run's hours and diesel appear here." />
       ) : (
-        <Table>
+        <Table hideControlsWhenSinglePage>
           <TableHeader>
             <TableRow>
               <TableHead>Started</TableHead>

@@ -26,7 +26,7 @@ export function InspectionResults({ inspection }: { inspection: Inspection }) {
       <p className="text-sm">
         <MillStatus status={inspection.outcome} /> <span className="text-muted-foreground">· {formatWhen(inspection.inspectedAt)}</span>
       </p>
-      <Table>
+      <Table hideControlsWhenSinglePage>
         <TableHeader>
           <TableRow>
             <TableHead>Check</TableHead>

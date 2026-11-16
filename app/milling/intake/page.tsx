@@ -67,12 +67,12 @@ export default function MillIntakePage() {
           <Alert variant="destructive">
             <AlertDescription>{getApiErrorMessage(query.error)}</AlertDescription>
           </Alert>
-        ) : query.isLoading ? (
+        ) : query.isPending ? (
           <Skeleton className="h-64 w-full" />
         ) : !query.data?.rows.length ? (
           <EmptyState title="No deliveries here" body={status === "AWAITING_QC" ? "Deliveries appear here as they are recorded at the gate." : "Nothing in this list yet."} />
         ) : (
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 <TableHead>Delivery</TableHead>

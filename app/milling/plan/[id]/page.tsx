@@ -34,7 +34,7 @@ export default function OrderPage() {
   const query = useQuery({ queryKey: ["milling", "order", id], queryFn: () => fetchJson<Detail>(`/api/milling/orders/${id}`) });
   const action = useMillPost({ done: "Saved" });
   const [reason, setReason] = useState("");
-  if (query.isLoading || !query.data) return <Skeleton className="m-4 h-96" />;
+  if (query.isPending || !query.data) return <Skeleton className="m-4 h-96" />;
   const { order, needs } = query.data;
   const act = (name: string, body?: unknown) => action.post(`/api/milling/orders/${id}/${name}`, body);
 
@@ -60,7 +60,7 @@ export default function OrderPage() {
           <RecordHistory entityType="MillingProductionOrder" entityId={order.id} />
         ) : (
           <>
-            <Table>
+            <Table hideControlsWhenSinglePage>
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>

@@ -32,12 +32,12 @@ export default function MillShiftsPage() {
       <PageChrome title="Shifts" />
       <div className="space-y-4 px-4 py-2">
         <div className="flex justify-end">{access.can("shift.manage") ? <PlanShift onCreated={(id) => router.push(`/milling/shifts/${id}`)} /> : null}</div>
-        {query.isLoading ? (
+        {query.isPending ? (
           <Skeleton className="h-64 w-full" />
         ) : !query.data?.length ? (
           <EmptyState title="No shifts yet" body="Plan a shift and its crew; open it when work starts." />
         ) : (
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 <TableHead>Shift</TableHead>

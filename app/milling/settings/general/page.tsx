@@ -20,7 +20,7 @@ export default function MillGeneralSettingsPage() {
   const query = useQuery({ queryKey: ["milling", "settings", "general"], queryFn: () => fetchJson<General>("/api/milling/settings/general") });
   return (
     <MillSettingsShell>
-      {query.isLoading ? (
+      {query.isPending ? (
         <Skeleton className="h-48 w-full max-w-lg" />
       ) : query.isError || !query.data ? (
         <Alert variant="destructive">

@@ -57,7 +57,7 @@ export default function MillGroupsPage() {
     onError: (error) => toast({ title: "Not saved", description: getApiErrorMessage(error), variant: "destructive" }),
   });
 
-  if (access.isLoading) return <MillSettingsShell><Skeleton className="h-64 w-full" /></MillSettingsShell>;
+  if (access.isPending) return <MillSettingsShell><Skeleton className="h-64 w-full" /></MillSettingsShell>;
   if (!allowed) {
     return (
       <MillSettingsShell>
@@ -80,13 +80,13 @@ export default function MillGroupsPage() {
         <Alert variant="destructive">
           <AlertDescription>{getApiErrorMessage(query.error)}</AlertDescription>
         </Alert>
-      ) : query.isLoading ? (
+      ) : query.isPending ? (
         <Skeleton className="h-64 w-full" />
       ) : members.length === 0 ? (
         <EmptyState title="No one to place yet" body="Add people under People first; they appear here to be given groups." />
       ) : (
         <div className="overflow-x-auto">
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 <TableHead>Person</TableHead>

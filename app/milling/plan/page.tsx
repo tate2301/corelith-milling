@@ -50,12 +50,12 @@ export default function MillPlanPage() {
           </SectionTabs>
           {access.can("plan.edit") ? <NewOrder onCreated={(id) => router.push(`/milling/plan/${id}`)} /> : null}
         </div>
-        {query.isLoading ? (
+        {query.isPending ? (
           <Skeleton className="h-64 w-full" />
         ) : !query.data?.rows.length ? (
           <EmptyState title="No orders here" body="Plan what to make, then submit it for management to approve." />
         ) : (
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 <TableHead>Order</TableHead>

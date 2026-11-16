@@ -29,12 +29,12 @@ export default function MillPackingPage() {
       <PageChrome title="Packing" />
       <div className="space-y-4 px-4 py-2">
         <div className="flex justify-end">{access.can("stage.record") ? <PackRun /> : null}</div>
-        {query.isLoading ? (
+        {query.isPending ? (
           <Skeleton className="h-64 w-full" />
         ) : !query.data?.length ? (
           <EmptyState title="Nothing packed yet" body="Pack released bulk product into bags; each run makes a lot of packed stock." />
         ) : (
-          <Table>
+          <Table hideControlsWhenSinglePage>
             <TableHeader>
               <TableRow>
                 <TableHead>Run</TableHead>
