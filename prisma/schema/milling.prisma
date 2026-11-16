@@ -17,3 +17,141 @@ model MillingGroupMember {
   @@unique([userId, groupCode])
   @@index([companyId, groupCode])
 }
+
+/// The mill's own settings, one row per workspace.
+model MillingSettings {
+  id                          String   @id @default(uuid())
+  companyId                   String   @unique
+  /// A batch whose material balance is off by more than this raises an exception.
+  reconciliationTolerancePct  Decimal  @default(2) @db.Decimal(5, 2)
+  /// What one intake bag is taken to weigh when maize is counted in bags.
+  defaultIntakeBagKg          Decimal  @default(50) @db.Decimal(8, 2)
+  /// Overtime is worked out against this many hours a shift.
+  shiftHours                  Decimal  @default(8.5) @db.Decimal(4, 2)
+  /// The usual crew on a shift.
+  shiftCrewSize               Int      @default(7)
+  updatedAt                   DateTime @updatedAt
+  updatedById                 String?
+}
+
+/// What a stock location is at the mill: its kind and how much it holds.
+model MillingLocationProfile {
+  id              String   @id @default(uuid())
+  companyId       String
+  /// The core StockLocation.
+  stockLocationId String   @unique
+  /// STORE, BIN, SILO, PROCESS, DOCK or VEHICLE.
+  kind            String
+  capacityKg      Decimal? @db.Decimal(14, 2)
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+/// A step of the mill's process route, in order.
+model MillingProcessStage {
+  id                 String   @id @default(uuid())
+  companyId          String
+  code               String
+  name               String
+  sequence           Int
+  /// A batch cannot complete without a record for a required stage.
+  required           Boolean  @default(true)
+  /// Whether the stage records input and removed quantities, or only time and downtime.
+  capturesQuantities Boolean  @default(true)
+  /// Codes of the core Equipment that does the work, for downtime and the stage form.
+  equipmentCodes     String[] @default([])
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, sequence])
+}
+
+/// One check the mill makes, at intake or on finished product.
+model MillingQcSpec {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// INCOMING_MAIZE or FINISHED_PRODUCT.
+  point       String
+  code        String
+  name        String
+  /// VISUAL or INSTRUMENT.
+  method      String
+  /// NUMERIC (a reading against limits) or PASS_FAIL.
+  resultType  String
+  unit        String?
+  minValue    Decimal? @db.Decimal(12, 3)
+  maxValue    Decimal? @db.Decimal(12, 3)
+  /// What a pass looks like, shown next to the result.
+  guidance    String?
+  /// A required check that is not performed blocks release until overridden.
+  required    Boolean  @default(true)
+  /// Raised on every change, so a result keeps the version it was judged against.
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, point, code])
+}
+
+/// A place the mill delivers to.
+model MillingDestination {
+  id         String   @id @default(uuid())
+  companyId  String
+  code       String
+  name       String
+  distanceKm Decimal? @db.Decimal(8, 1)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([companyId, code])
+}
+
+/// A vehicle's delivery details; the vehicle itself is core Equipment (category VEHICLE).
+model MillingVehicleProfile {
+  id                 String   @id @default(uuid())
+  companyId          String
+  equipmentId        String   @unique
+  registrationNumber String?
+  /// Most it may carry; loading over it is refused.
+  capacityKg         Decimal? @db.Decimal(10, 2)
+  /// The core User who usually drives it.
+  driverUserId       String?
+  updatedAt          DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+/// A duty on the shift (e.g. "Roller mill operator"), for allocating the crew.
+model MillingShiftDuty {
+  id        String   @id @default(uuid())
+  companyId String
+  code      String
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, code])
+}
+
+/// How one packed product is made: bulk product, bag and thread per bag.
+model MillingPackRecipe {
+  id              String   @id @default(uuid())
+  companyId       String
+  /// The packed Product (unit BAG), e.g. Mealie meal 10 kg.
+  packedProductId String   @unique
+  bulkProductId   String
+  bagProductId    String?
+  /// Bulk kg in one bag; normally the packed product's net weight.
+  kgPerBag        Decimal  @db.Decimal(8, 3)
+  threadPerBag    Decimal? @db.Decimal(8, 4)
+  isActive        Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId])
+}
