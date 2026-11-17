@@ -289,7 +289,9 @@ const CORE_FEATURE_BUNDLES: FeatureBundleDefinition[] = [
     base: true,
     name: "Workforce Core",
     description: "Employee directory and workforce base records.",
-    features: ["hr.employees", "hr.attendance", "hr.leave"],
+    // The attendance report reads the register this bundle keeps, in any
+    // trade: by shift and site, with overtime. It was the mine's alone.
+    features: ["hr.employees", "hr.attendance", "hr.leave", "reports.attendance"],
   },
   {
     code: "ADDON_GOLD_CORE",

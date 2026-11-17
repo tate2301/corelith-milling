@@ -11,6 +11,8 @@ import { FEATURE_CATALOG } from "@/lib/platform/feature-catalog";
 
 import {
   ExtensionError,
+  checkNavLayout,
+  extensionManagementLinks,
   extensionNavAdditionPrefixes,
   extensionNavAddresses,
   extensionNavGroups,
@@ -189,6 +191,44 @@ describe("an extension's further groups and additions", () => {
     });
     expect(extensionNavAddresses([ext])).toEqual(["/milling/runs", "/milling/till", "/milling/customers/routes?day=mon"]);
     expect(extensionNavAdditionPrefixes([ext])).toEqual([["crm", ["/milling/customers/routes"]]]);
+  });
+});
+
+describe("an extension's link into Management", () => {
+  const link = (kid: Record<string, unknown>): CorelithExtension => ({
+    ...base,
+    nav: { label: "The mill", nodes: [{ id: "milling.settings", label: "Settings", icon: "home", href: "/milling/settings", kids: [kid as never] }] },
+  });
+
+  it("may point outside its root only at the Management row it names", () => {
+    const sites = { id: "milling.sites", label: "Sites", icon: "site", href: "/preferences/organization/sites", management: "sites" };
+    expect(mergeNavNodes([], [link(sites)])[0]?.kids?.[0]?.management).toBe("sites");
+    expect(extensionNavAddresses([link(sites)])).toEqual(["/milling/settings"]);
+    expect([...extensionManagementLinks([link(sites)])]).toEqual([["/preferences/organization/sites", "sites"]]);
+    expect(() => mergeNavNodes([], [link({ ...sites, management: "nowhere" })])).toThrow(/does not exist/);
+    expect(() => mergeNavNodes([], [link({ ...sites, href: "/retail/sales" })])).toThrow(/must be "\/preferences\/organization\/sites"/);
+  });
+});
+
+describe("an extension's group order and trade words", () => {
+  const nodes = [
+    { id: "onhand", label: "On hand", icon: "stockroom", href: "/retail/stock", group: "stock" as const },
+    { id: "milling.runs", label: "Runs", icon: "home", href: "/milling/runs", group: "ext.milling" as const },
+  ];
+  const ext = (nav: Partial<ExtensionNav>): CorelithExtension => ({ ...base, nav: { label: "The mill", nodes: [], ...nav } });
+
+  it("accepts core's groups, its own and real rows", () => {
+    expect(() =>
+      checkNavLayout(nodes, [ext({ order: ["ext.milling", "stock", "books"], labels: { groups: { stock: "Stores" }, rows: { onhand: "Stock" } } })]),
+    ).not.toThrow();
+  });
+
+  it("refuses groups and rows that are not drawn, and a group ordered twice", () => {
+    expect(() => checkNavLayout(nodes, [ext({ order: ["ext.other"] })])).toThrow(/not a sidebar group/);
+    expect(() => checkNavLayout(nodes, [ext({ order: ["top"] })])).toThrow(/not a sidebar group/);
+    expect(() => checkNavLayout(nodes, [ext({ order: ["stock", "stock"] })])).toThrow(/twice/);
+    expect(() => checkNavLayout(nodes, [ext({ labels: { groups: { nowhere: "x" } as never } })])).toThrow(/group "nowhere"/);
+    expect(() => checkNavLayout(nodes, [ext({ labels: { rows: { nowhere: "x" } } })])).toThrow(/row "nowhere"/);
   });
 });
 

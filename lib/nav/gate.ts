@@ -1,6 +1,13 @@
 import { registeredExtensions } from "@/extensions";
 import { isRouteAllowedForRole } from "@/lib/auth-core/role-routes";
-import { extensionNavAdditionPrefixes, extensionNavAddresses, extensionNavGroups } from "@/lib/extensions/registry";
+import {
+  extensionManagementLinks,
+  extensionNavAdditionPrefixes,
+  extensionNavAddresses,
+  extensionNavGroups,
+} from "@/lib/extensions/registry";
+import { getVisibleSettingsNavEntries } from "@/lib/settings/management-nav";
+import { composeManagement } from "./management";
 import { canAccessRouteWithToken } from "@/lib/platform/gating/enforcer";
 import { resolveFeatureKeyForPath } from "@/lib/platform/gating/route-registry";
 import { getWorkspaceOptions, getWorkspaceSidebarModel } from "@/lib/workspaces";
@@ -62,11 +69,26 @@ export function lockedAddresses(who: Who): Map<string, string> {
   return locks;
 }
 
+const MANAGEMENT_LINKS = extensionManagementLinks(registeredExtensions);
+
+/**
+ * The extension rows that open a Management row this person may open: such a
+ * row shows exactly when Management shows its row (`composeManagement`).
+ */
+function managementLinksOpen(who: Who, open: (href: string) => boolean): Set<string> {
+  if (MANAGEMENT_LINKS.size === 0) return new Set();
+  const settings = new Set(getVisibleSettingsNavEntries(who).map((entry) => entry.id));
+  const rows = new Set(composeManagement({ settings, canOpen: open }).flatMap((group) => group.items.map((item) => item.id)));
+  return new Set([...MANAGEMENT_LINKS].filter(([, id]) => rows.has(id)).map(([href]) => href));
+}
+
 /** `canOpen` for `composeNav`: a page with a query is open when its path is. */
 export function canOpenFor(who: Who): (href: string) => boolean {
   const open = visibleAddresses(who);
   const paths = new Set([...open].map(pathOf));
-  return (href) => open.has(href) || paths.has(pathOf(href));
+  const base = (href: string) => open.has(href) || paths.has(pathOf(href));
+  const management = managementLinksOpen(who, base);
+  return (href) => base(href) || management.has(href);
 }
 
 const CORE_PRODUCT_PREFIXES: Array<[NavGroupId, string[]]> = [
@@ -103,4 +125,27 @@ export function productGroupsFor(open: Set<string>, profile: string | null | und
   ).map(([id]) => id);
   const first = own[String(profile ?? "").toUpperCase()] ?? running.find((id) => id.startsWith("ext."));
   return first && running.includes(first) ? [first, ...running.filter((id) => id !== first)] : running;
+}
+
+export type NavLayout = {
+  products: NavGroupId[];
+  order: NavGroupId[];
+  labels: Record<string, string>;
+  groupLabels: Partial<Record<NavGroupId, string>>;
+};
+
+/**
+ * How this workspace's sidebar is laid out: its product groups and, when an
+ * extension's product is the tenant's own, that extension's group order and
+ * trade words (`nav.order`, `nav.labels`). What shows is still `canOpen`'s.
+ */
+export function navLayoutFor(open: Set<string>, profile: string | null | undefined): NavLayout {
+  const products = productGroupsFor(open, profile);
+  const own = registeredExtensions.find((extension) => products[0] === `ext.${extension.id}`);
+  return {
+    products,
+    order: [...(own?.nav?.order ?? [])],
+    labels: { ...own?.nav?.labels?.rows },
+    groupLabels: { ...own?.nav?.labels?.groups },
+  };
 }

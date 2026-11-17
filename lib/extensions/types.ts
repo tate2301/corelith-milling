@@ -1,5 +1,5 @@
 import type { ClientBundleTemplateDefinition } from "@/lib/platform/client-templates";
-import type { CoreNavGroupId, NavKid } from "@/lib/nav/registry";
+import type { CoreNavGroupId, NavGroupId, NavKid } from "@/lib/nav/registry";
 import type { ReportDefinition } from "@/lib/reports/types";
 import type { UserRole } from "@/lib/roles";
 import type { VerticalProductBundleDefinition } from "@/lib/workspace-products";
@@ -92,6 +92,25 @@ export interface ExtensionNav {
    * hidden; the added row's id and address are still the extension's own.
    */
   additions?: ExtensionNavAddition[];
+  /**
+   * While the workspace runs this extension's product: the order its groups
+   * are drawn in, core's and the extension's own mixed (`["ext.milling",
+   * "stock", "ext.milling.gate", "crm", "books"]`). Groups left out keep
+   * core's order after these. The top rows stay first.
+   */
+  order?: NavGroupId[];
+  /**
+   * While the workspace runs this extension's product: the trade's own words
+   * for core's groups and rows, by id (`{ groups: { stock: "Stores" },
+   * rows: { workorders: "Work orders" } }`). Only the words change; what a
+   * row opens and who may open it do not.
+   */
+  labels?: ExtensionNavLabels;
+}
+
+export interface ExtensionNavLabels {
+  groups?: Partial<Record<NavGroupId, string>>;
+  rows?: Record<string, string>;
 }
 
 export interface ExtensionNavGroup {

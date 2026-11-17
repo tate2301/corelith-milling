@@ -10,6 +10,7 @@ describe("fork boundary", () => {
           "FORK.md",
           "extensions/index.ts",
           "extensions/server.ts",
+          "extensions/nav-server.ts",
           "extensions/milling/index.ts",
           "lib/milling/runs/approve.ts",
           "lib/milling/runs/approve.test.ts",

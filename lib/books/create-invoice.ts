@@ -28,6 +28,10 @@ export const invoiceSchema = z.object({
         unitPrice: z.number().min(0),
         taxCodeId: z.string().uuid().optional(),
         taxRate: z.number().min(0).max(100).optional(),
+        /** The product sold; the line keeps its net weight per unit, so sales read in tonnes. */
+        productId: z.string().uuid().optional(),
+        /** Money off the line, before tax. */
+        discountAmount: z.number().min(0).optional(),
         debit: z.number().min(0).optional(),
         credit: z.number().min(0).optional(),
       }),
@@ -107,13 +111,26 @@ export async function createSalesInvoice(
 
   const taxById = new Map(taxCodes.map((tax) => [tax.id, tax.rate]));
 
+  const productIds = [...new Set(validated.lines.flatMap((line) => (line.productId ? [line.productId] : [])))];
+  const products = productIds.length
+    ? await prisma.product.findMany({ where: { id: { in: productIds }, companyId: actor.companyId }, select: { id: true, netWeightKg: true } })
+    : [];
+  if (products.length !== productIds.length) throw new InvoiceRefused("Invalid product");
+  const weightByProduct = new Map(products.map((product) => [product.id, product.netWeightKg]));
+
   const computedLines = linesWithResolvedTaxCode.map((line) => {
     const taxRate = line.taxRate ?? taxById.get(line.taxCodeId ?? "") ?? 0;
-    const lineNet = line.quantity * line.unitPrice;
+    const discountAmount = line.discountAmount ?? 0;
+    const lineGross = line.quantity * line.unitPrice;
+    if (discountAmount > lineGross) throw new InvoiceRefused("A discount cannot be more than the line");
+    const lineNet = lineGross - discountAmount;
     const taxAmount = (lineNet * taxRate) / 100;
     const total = lineNet + taxAmount;
     return {
       description: line.description,
+      productId: line.productId ?? null,
+      netWeightKg: line.productId ? (weightByProduct.get(line.productId) ?? null) : null,
+      discountAmount,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       taxCodeId: line.taxCodeId,
@@ -125,7 +142,7 @@ export async function createSalesInvoice(
     };
   });
 
-  const subTotal = computedLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+  const subTotal = computedLines.reduce((sum, line) => sum + line.quantity * line.unitPrice - line.discountAmount, 0);
   const taxTotal = computedLines.reduce((sum, line) => sum + line.taxAmount, 0);
   const total = computedLines.reduce((sum, line) => sum + line.lineTotal, 0);
 

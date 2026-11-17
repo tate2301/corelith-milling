@@ -13,7 +13,7 @@
  */
 
 import { registeredExtensions } from "@/extensions";
-import { extensionNavGroups, mergeNavNodes } from "@/lib/extensions/registry";
+import { checkNavLayout, extensionNavGroups, mergeNavNodes } from "@/lib/extensions/registry";
 
 export type NavIconName = string;
 
@@ -44,6 +44,12 @@ export type NavKid = {
   badge?: string;
   /** Where the page lives today, in order of preference. */
   live?: string[];
+  /**
+   * The Management row this opens, by id (`lib/nav/management.ts`): an
+   * extension's link into setup that lives in Management, such as Sites. It
+   * shows when this person may open that row, and is drawn with ↗.
+   */
+  management?: string;
 };
 
 export type NavNode = NavKid & {
@@ -280,3 +286,4 @@ const CORE_NAV_NODES: readonly NavNode[] = [
 
 /** Core's rows, then each registered extension's own group (`extensions/index.ts`). */
 export const NAV_NODES: readonly NavNode[] = mergeNavNodes(CORE_NAV_NODES, registeredExtensions);
+checkNavLayout(NAV_NODES, registeredExtensions);

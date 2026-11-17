@@ -1,5 +1,6 @@
 import type { ClientBundleTemplateDefinition } from "@/lib/platform/client-templates";
 import type { FeatureBundleDefinition, FeatureCatalogEntry } from "@/lib/platform/feature-catalog";
+import { MANAGEMENT_GROUPS } from "@/lib/nav/management";
 import type { NavGroupId, NavKid, NavNode } from "@/lib/nav/registry";
 import type { FeatureRoleRegistration } from "@/lib/platform/vertical-role-registry";
 import type { FeatureRouteEntry } from "@/lib/platform/gating/types";
@@ -195,12 +196,22 @@ function insideRoot(extension: CorelithExtension, href: string): boolean {
   return path === root || path.startsWith(`${root}/`);
 }
 
+const MANAGEMENT_HREF = new Map(MANAGEMENT_GROUPS.flatMap((group) => group.items.map((item) => [item.id, item.href] as const)));
+
 function checkNavKid(extension: CorelithExtension, kid: NavKid, ids: Set<string>): void {
   if (!ownsKey(extension, kid.id)) {
     throw new ExtensionError(extension.id, `nav row "${kid.id}" must have an id starting "${extension.id}."`);
   }
   if (ids.has(kid.id)) throw new ExtensionError(extension.id, `nav row "${kid.id}" is declared twice`);
   ids.add(kid.id);
+  if (kid.management !== undefined) {
+    const href = MANAGEMENT_HREF.get(kid.management);
+    if (!href) throw new ExtensionError(extension.id, `nav row "${kid.id}" opens Management row "${kid.management}", which does not exist`);
+    if (kid.href !== href || kid.live?.length) {
+      throw new ExtensionError(extension.id, `nav row "${kid.id}" opens Management row "${kid.management}", so its address must be "${href}"`);
+    }
+    return;
+  }
   for (const href of [kid.href, ...(kid.live ?? [])]) {
     if (!insideRoot(extension, href)) {
       throw new ExtensionError(extension.id, `nav row "${kid.id}" points at "${href}", outside "/${extension.id}"`);
@@ -268,15 +279,49 @@ export function mergeNavNodes(core: readonly NavNode[], extensions: readonly Cor
         throw new ExtensionError(extension.id, `nav row "${addition.id}" sits under a core row, so it cannot have children`);
       }
       const parent = merged[at]!;
-      const { id, label, icon, href, badge, live } = addition;
-      merged[at] = { ...parent, kids: [...(parent.kids ?? []), { id, label, icon, href, badge, live }] };
+      const { id, label, icon, href, badge, live, management } = addition;
+      merged[at] = { ...parent, kids: [...(parent.kids ?? []), { id, label, icon, href, badge, live, management }] };
     }
   }
   return merged;
 }
 
+/**
+ * Checks an extension's group order and trade words against the rows that
+ * exist once every extension is merged: each id must name a group or row
+ * that is drawn, and a group may be ordered once.
+ */
+export function checkNavLayout(nodes: readonly NavNode[], extensions: readonly CorelithExtension[]): void {
+  const groups = new Set<string>([...NAV_TARGETS, "saved", ...extensionNavGroups(extensions).map((group) => group.id)]);
+  const rows = new Set(nodes.flatMap((node) => [node.id, ...(node.kids ?? []).map((kid) => kid.id)]));
+  for (const extension of extensions) {
+    const nav = extension.nav;
+    if (!nav) continue;
+    const seen = new Set<string>();
+    for (const id of nav.order ?? []) {
+      if (!groups.has(id)) throw new ExtensionError(extension.id, `nav order names "${id}", which is not a sidebar group`);
+      if (seen.has(id)) throw new ExtensionError(extension.id, `nav order names "${id}" twice`);
+      seen.add(id);
+    }
+    for (const id of Object.keys(nav.labels?.groups ?? {})) {
+      if (!groups.has(id)) throw new ExtensionError(extension.id, `nav labels name group "${id}", which is not a sidebar group`);
+    }
+    for (const id of Object.keys(nav.labels?.rows ?? {})) {
+      if (!rows.has(id)) throw new ExtensionError(extension.id, `nav labels name row "${id}", which is not a sidebar row`);
+    }
+  }
+}
+
 function pathsOf(nodes: readonly ExtensionNavNode[]): string[] {
-  return [...new Set(nodes.flatMap((node) => [node, ...(node.kids ?? [])]).flatMap((kid) => [kid.href, ...(kid.live ?? [])]).map((href) => href.split("?")[0] ?? href))];
+  return [
+    ...new Set(
+      nodes
+        .flatMap((node) => [node, ...(node.kids ?? [])])
+        .filter((kid) => !kid.management)
+        .flatMap((kid) => [kid.href, ...(kid.live ?? [])])
+        .map((href) => href.split("?")[0] ?? href),
+    ),
+  ];
 }
 
 /**
@@ -314,8 +359,24 @@ export function extensionNavAddresses(extensions: readonly CorelithExtension[]):
     const nav = extension.nav;
     if (!nav) return [];
     const nodes = [...nav.nodes, ...(nav.groups ?? []).flatMap((group) => group.nodes), ...(nav.additions ?? [])];
-    return nodes.flatMap((node) => [node, ...(node.kids ?? [])].flatMap((kid) => [kid.href, ...(kid.live ?? [])]));
+    return nodes.flatMap((node) =>
+      [node, ...(node.kids ?? [])].filter((kid) => !kid.management).flatMap((kid) => [kid.href, ...(kid.live ?? [])]),
+    );
   });
+}
+
+/** Extension rows that open a Management row, address to row id: shown when that row is, not by the extension's features. */
+export function extensionManagementLinks(extensions: readonly CorelithExtension[]): Map<string, string> {
+  return new Map(
+    extensions.flatMap((extension) => {
+      const nav = extension.nav;
+      if (!nav) return [];
+      const nodes = [...nav.nodes, ...(nav.groups ?? []).flatMap((group) => group.nodes), ...(nav.additions ?? [])];
+      return nodes
+        .flatMap((node) => [node, ...(node.kids ?? [])])
+        .flatMap((kid) => (kid.management ? [[kid.href, kid.management] as const] : []));
+    }),
+  );
 }
 
 /** The product bundle an extension owns. */

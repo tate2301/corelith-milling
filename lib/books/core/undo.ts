@@ -273,7 +273,16 @@ async function draftCopy(tx: Prisma.TransactionClient, actor: BooksActor, kind: 
           quotationId: old.quotationId,
           createdById: actor.userId,
           supersedesId: old.id,
-          lines: { create: old.lines.map((line) => ({ ...copyLine(line), debit: line.debit, credit: line.credit })) },
+          lines: {
+            create: old.lines.map((line) => ({
+              ...copyLine(line),
+              debit: line.debit,
+              credit: line.credit,
+              productId: line.productId,
+              netWeightKg: line.netWeightKg,
+              discountAmount: line.discountAmount,
+            })),
+          },
         },
         select: { id: true },
       });
