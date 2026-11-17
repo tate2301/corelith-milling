@@ -184,6 +184,11 @@ function NodeRow({
                 <NavIcon name={kid.icon} className={styles.ic14} />
                 <span className={styles.lbl}>{kid.label}</span>
                 {badges[kid.href] ? <span className={styles.cnt}>{badges[kid.href]}</span> : null}
+                {kid.management ? (
+                  <span className={styles.out} aria-label="opens Management">
+                    ↗
+                  </span>
+                ) : null}
               </Link>
             );
           })}

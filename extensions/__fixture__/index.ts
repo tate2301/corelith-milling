@@ -80,5 +80,35 @@ export const fixtureExtension: CorelithExtension = {
         ],
       },
     ],
+    groups: [
+      {
+        key: "setup",
+        label: "Fixture setup",
+        nodes: [
+          {
+            id: "fixture.settings",
+            label: "Settings",
+            icon: "checklist",
+            href: "/fixture/settings",
+            kids: [
+              { id: "fixture.settings-lines", label: "Lines", icon: "checklist", href: "/fixture/settings" },
+              { id: "fixture.settings-sites", label: "Sites", icon: "site", href: "/preferences/organization/sites", management: "sites" },
+            ],
+          },
+        ],
+      },
+      {
+        key: "gate",
+        label: "Fixture gate",
+        nodes: [{ id: "fixture.till", label: "Till", icon: "receipt", href: "/fixture/gate/till" }],
+      },
+    ],
+    additions: [
+      { into: "stock", id: "fixture.fuel", label: "Fuel issues", icon: "transfer", href: "/fixture/stock/fuel" },
+      { into: "stock", under: "buying", id: "fixture.goods-in", label: "Goods in", icon: "stockroom", href: "/fixture/stock/goods-in" },
+      { into: "crm", id: "fixture.routes", label: "Routes", icon: "deal", href: "/fixture/customers/routes" },
+    ],
+    order: ["ext.fixture", "stock", "ext.fixture.gate"],
+    labels: { groups: { stock: "Stores" }, rows: { onhand: "Stock" } },
   },
 };

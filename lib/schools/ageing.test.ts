@@ -69,11 +69,11 @@ describe("daysPastDue", () => {
 describe("ageingBands", () => {
   it("returns the five bands in order, with their labels", () => {
     expect(ageingBands({}).map((band) => band.label)).toEqual([
-      "Current",
-      "1–30 days",
-      "31–60 days",
-      "61–90 days",
-      "90+ days",
+      "Not yet due",
+      "1 to 30 days",
+      "31 to 60 days",
+      "61 to 90 days",
+      "Over 90 days",
     ]);
   });
 
