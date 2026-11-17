@@ -11,6 +11,9 @@ import { FEATURE_CATALOG } from "@/lib/platform/feature-catalog";
 
 import {
   ExtensionError,
+  extensionNavAdditionPrefixes,
+  extensionNavAddresses,
+  extensionNavGroups,
   mergeNavNodes,
   withExtensionEquipmentCategories,
   mergeProducts,
@@ -23,7 +26,7 @@ import {
   mergeRoutes,
   mergeTemplates,
 } from "./registry";
-import type { CorelithExtension } from "./types";
+import type { CorelithExtension, ExtensionNav } from "./types";
 
 const base: CorelithExtension = { id: "milling", label: "Milling", features: [] };
 const feature = (key: string) => ({ key, name: key, description: key, defaultEnabled: false });
@@ -110,6 +113,82 @@ describe("an extension's sidebar rows stay inside its paths", () => {
     expect(() =>
       mergeNavNodes([{ id: "milling.runs", label: "x", icon: "home", href: "/x", group: "top" }], [nav("milling.runs", "/milling")]),
     ).toThrow(/declared twice/);
+  });
+});
+
+describe("an extension's further groups and additions", () => {
+  const core = [
+    { id: "onhand", label: "On hand", icon: "stockroom", href: "/retail/stock", group: "stock" as const },
+    { id: "buying", label: "Buying", icon: "purchase-order", href: "/retail/buying", group: "stock" as const, kids: [
+      { id: "buying-orders", label: "Orders", icon: "x", href: "/retail/buying/orders" },
+    ] },
+  ];
+  const row = (id: string, href = `/milling/${id.split(".")[1]}`) => ({ id, label: "x", icon: "home", href });
+  const with_ = (nav: Partial<ExtensionNav>): CorelithExtension => ({ ...base, nav: { label: "The mill", nodes: [], ...nav } });
+
+  it("gives a further group its own id after the extension's", () => {
+    const merged = mergeNavNodes([], [with_({ groups: [{ key: "gate", label: "Gate sales", nodes: [row("milling.till")] }] })]);
+    expect(merged[0]?.group).toBe("ext.milling.gate");
+    expect(extensionNavGroups([with_({ groups: [{ key: "gate", label: "Gate sales", nodes: [row("milling.till")] }] })])).toEqual([
+      { id: "ext.milling", label: "The mill", prefixes: ["/milling"] },
+      { id: "ext.milling.gate", label: "Gate sales", prefixes: ["/milling/till"] },
+    ]);
+  });
+
+  it("refuses a bad or repeated group key, and rows outside its paths in a further group", () => {
+    expect(() => mergeNavNodes([], [with_({ groups: [{ key: "Gate", label: "x", nodes: [] }] })])).toThrow(/lower-case/);
+    const twice = { key: "gate", label: "x", nodes: [] };
+    expect(() => mergeNavNodes([], [with_({ groups: [twice, twice] })])).toThrow(/declared twice/);
+    expect(() =>
+      mergeNavNodes([], [with_({ groups: [{ key: "gate", label: "x", nodes: [row("milling.till", "/retail/pos")] }] })]),
+    ).toThrow(/outside "\/milling"/);
+  });
+
+  it("adds a row after a core group's own, without touching core's rows", () => {
+    const merged = mergeNavNodes(core, [with_({ additions: [{ ...row("milling.fuel"), into: "stock" }] })]);
+    expect(merged.map((node) => node.id)).toEqual(["onhand", "buying", "milling.fuel"]);
+    expect(merged[2]).toEqual({ ...row("milling.fuel"), group: "stock" });
+    expect(merged[0]).toBe(core[0]);
+  });
+
+  it("adds a child under a core row of that group", () => {
+    const merged = mergeNavNodes(core, [with_({ additions: [{ ...row("milling.goods-in"), into: "stock", under: "buying" }] })]);
+    expect(merged.find((node) => node.id === "buying")?.kids?.map((kid) => kid.id)).toEqual(["buying-orders", "milling.goods-in"]);
+    expect(core[1]?.kids).toHaveLength(1);
+  });
+
+  it("refuses an addition that is not its own, joins no core group, or sits under a row that is not core's", () => {
+    expect(() => mergeNavNodes(core, [with_({ additions: [{ ...row("fuel"), into: "stock" }] })])).toThrow(/starting "milling."/);
+    expect(() =>
+      mergeNavNodes(core, [with_({ additions: [{ ...row("milling.fuel", "/retail/stock/fuel"), into: "stock" }] })]),
+    ).toThrow(/outside "\/milling"/);
+    for (const into of ["top", "saved", "ext.other"]) {
+      expect(() =>
+        mergeNavNodes(core, [with_({ additions: [{ ...row("milling.fuel"), into: into as "stock" }] })]),
+      ).toThrow(/cannot join/);
+    }
+    expect(() =>
+      mergeNavNodes(core, [with_({ additions: [{ ...row("milling.x"), into: "people", under: "buying" }] })]),
+    ).toThrow(/not a core row in "people"/);
+    expect(() =>
+      mergeNavNodes(core, [with_({ nodes: [row("milling.runs")], additions: [{ ...row("milling.x"), into: "stock", under: "milling.runs" }] })]),
+    ).toThrow(/not a core row/);
+    expect(() =>
+      mergeNavNodes(core, [with_({ additions: [{ ...row("milling.x"), into: "stock", under: "buying", kids: [row("milling.y")] }] })]),
+    ).toThrow(/cannot have children/);
+    expect(() =>
+      mergeNavNodes(core, [with_({ nodes: [row("milling.fuel")], additions: [{ ...row("milling.fuel"), into: "stock" }] })]),
+    ).toThrow(/declared twice/);
+  });
+
+  it("lists every address it can show and the core product groups its additions run", () => {
+    const ext = with_({
+      nodes: [row("milling.runs")],
+      groups: [{ key: "gate", label: "x", nodes: [row("milling.till")] }],
+      additions: [{ ...row("milling.routes", "/milling/customers/routes?day=mon"), into: "crm" }],
+    });
+    expect(extensionNavAddresses([ext])).toEqual(["/milling/runs", "/milling/till", "/milling/customers/routes?day=mon"]);
+    expect(extensionNavAdditionPrefixes([ext])).toEqual([["crm", ["/milling/customers/routes"]]]);
   });
 });
 
