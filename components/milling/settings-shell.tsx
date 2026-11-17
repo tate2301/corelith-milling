@@ -1,34 +1,36 @@
 "use client";
 
+import { NavRail, NavRailItem } from "@corelithzw/react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { PageChrome } from "@/components/layout/page-chrome";
-import { SectionTab, SectionTabs } from "@/components/ui/section-tabs";
-import { SETTINGS_RESOURCES } from "@/lib/milling/settings/fields";
+import { OwnsChrome } from "@/components/management/ui";
+import { ManagementShell } from "@/components/settings/management-shell";
+import { MILL_SETTINGS_SECTIONS, millSettingsSection } from "@/lib/milling/settings/navigation";
 
-/** The mill's settings, one subject per tab. Each tab is its own page under /milling/settings. */
-export const MILL_SETTINGS_TABS: ReadonlyArray<{ href: string; label: string }> = [
-  { href: "/milling/settings/general", label: "Shift and tolerances" },
-  ...SETTINGS_RESOURCES.map((resource) => ({ href: `/milling/settings/${resource.key}`, label: resource.label })),
-  { href: "/milling/settings/groups", label: "Groups" },
-];
+import styles from "./settings.module.css";
 
+/** The same settings paint scope as Management, with route-backed, responsive section navigation. */
 export function MillSettingsShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const active = millSettingsSection(pathname);
   return (
-    <>
-      <PageChrome title="Mill settings" />
-      <div className="px-4 pt-2">
-        <SectionTabs label="Mill settings">
-          {MILL_SETTINGS_TABS.map((tab) => (
-            <SectionTab key={tab.href} to={tab.href} active={pathname?.startsWith(tab.href)}>
-              {tab.label}
-            </SectionTab>
-          ))}
-        </SectionTabs>
-      </div>
-      <div className="px-4 py-4">{children}</div>
-    </>
+    <ManagementShell>
+      <OwnsChrome>
+        <PageChrome title={active?.label ?? "Mill settings"} />
+        <div className={styles.layout}>
+          <NavRail label="Mill settings" orientation="responsive">
+            {MILL_SETTINGS_SECTIONS.map((section) => (
+              <NavRailItem key={section.href} asChild active={active?.href === section.href}>
+                <Link href={section.href}>{section.label}</Link>
+              </NavRailItem>
+            ))}
+          </NavRail>
+          <div className={styles.content}>{children}</div>
+        </div>
+      </OwnsChrome>
+    </ManagementShell>
   );
 }
