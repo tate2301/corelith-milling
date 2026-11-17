@@ -49,7 +49,7 @@ export const companyPage: SettingsPage = {
   change: ["retail.company", "update"],
   whoCanChange: "Owners only. Every change shows in Activity with who made it.",
   // A product record's "Break a case" and its liquor details follow these switches.
-  invalidates: [["retail-product"]],
+  invalidates: [["retail-product"], ["till-context"], ["retail-pos-catalog"], ["retail-pos-catalog-categories"]],
   sections: [
     {
       title: "Workspace profile",

@@ -19,6 +19,7 @@ import type { SettingsField, SettingsResource } from "@/lib/milling/settings/fie
 import type { SettingsList, SettingsOptions, SettingsRow } from "@/lib/milling/settings/server";
 
 import { useMillAccess } from "./use-mill-access";
+import { SectionHeading } from "@/components/management/ui";
 
 const NONE = "__none__";
 
@@ -104,10 +105,11 @@ export function SettingsResourceView({ resource }: { resource: SettingsResource 
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-2xl text-sm text-muted-foreground">{resource.description}</p>
-        {resource.canCreate && canEdit ? <Button onClick={() => open("new")}>Add a {resource.singular}</Button> : null}
-      </div>
+      <SectionHeading
+        variant="form"
+        count={query.data ? rows.length : undefined}
+        action={resource.canCreate && canEdit ? <Button onClick={() => open("new")}>Add a {resource.singular}</Button> : undefined}
+      >{resource.label}</SectionHeading>
 
       {query.isError ? (
         <Alert variant="destructive">

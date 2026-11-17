@@ -9,6 +9,7 @@ import { isPhoneNumber, YEAR_STARTS } from "@/lib/retail/settings-pages/company"
 import { companyProfilePatch, currencyCode, currencyLabel, yearStartMonth } from "./company";
 import { readSettings, readSettingsActivity, saveSettings } from "./index";
 import { SettingsRefused } from "./types";
+import { loadShopProfile, shopFeatures, liquorSaleRefusal } from "@/lib/retail/shop-profile";
 
 describe("the Shop page's rules", () => {
   it("changes the shop profile and the money, and only shows the business", () => {
@@ -190,6 +191,12 @@ describe("saving the Shop page", () => {
     await saveSettings(actor(), "company", { businessType: "General retail" });
     const read = await readSettings(companyId, "company", true);
     expect(read?.values).toMatchObject({ businessType: "General retail", casesAndSingles: false });
+    const profile = await loadShopProfile(companyId);
+    // The saved liquor preference survives, but neither the server nor a refreshed till enables it for General retail.
+    expect(profile.ageCheck).toBe(true);
+    expect(shopFeatures(profile).ageCheck).toBe(false);
+    expect(shopFeatures(profile).licenceHours).toBe(false);
+    expect(liquorSaleRefusal({ profile, hours: [], ageRestricted: ["Old category item"], idChecked: false, at: new Date() })).toBeNull();
     expect(await prisma.retailCategory.count({ where: { companyId, name: "Groceries" } })).toBeGreaterThan(0);
   });
 
