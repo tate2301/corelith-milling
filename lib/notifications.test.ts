@@ -30,7 +30,10 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+import { needsYou } from "@/lib/inbox/describe"
+
 import {
+  emitExtensionNotification,
   emitGoldExceptionNotification,
   emitGoldImportFailedNotification,
   emitGoldDispatchReceiptedNotification,
@@ -122,5 +125,42 @@ describe("emitGoldDispatchReceiptedNotification", () => {
     const data = mockNotificationCreate.mock.calls[0][0].data
     expect(data.severity).toBe(NotificationSeverity.INFO)
     expect(data.entityId).toBe("dispatch-1")
+  })
+})
+
+describe("emitExtensionNotification", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setupManagers()
+  })
+
+  it("files work handed over under Needs you, with the extension's page, and never tells the actor", async () => {
+    await emitExtensionNotification({
+      companyId: "co-1",
+      recipientIds: ["mgr-1", "mgr-2"],
+      actorId: "mgr-2",
+      title: "Maize to inspect: MI-261116-01",
+      summary: "Chirau farm, 20 000 kg",
+      viewPath: "/milling/intake/i-1",
+      entityId: "i-1",
+      needsYou: true,
+    })
+    expect(mockNotificationCreate).toHaveBeenCalledOnce()
+    const data = mockNotificationCreate.mock.calls[0][0].data
+    const payload = JSON.parse(data.payloadJson)
+    expect(payload).toEqual({ viewPath: "/milling/intake/i-1", module: "operations", needsYou: true })
+    expect(needsYou({ type: data.type, severity: data.severity, payload })).toBe(true)
+    expect(mockNotificationRecipientCreateMany.mock.calls[0][0].data.map((row: { userId: string }) => row.userId)).toEqual(["mgr-1"])
+  })
+
+  it("keeps news out of Needs you", async () => {
+    await emitExtensionNotification({ companyId: "co-1", recipientIds: ["mgr-1"], title: "Released", summary: "x", viewPath: "/milling", entityId: "l-1" })
+    const data = mockNotificationCreate.mock.calls[0][0].data
+    expect(needsYou({ type: data.type, severity: data.severity, payload: JSON.parse(data.payloadJson) })).toBe(false)
+  })
+
+  it("sends nothing when the actor is the only recipient", async () => {
+    await emitExtensionNotification({ companyId: "co-1", recipientIds: ["mgr-1"], actorId: "mgr-1", title: "t", summary: "s", viewPath: "/milling", entityId: "e" })
+    expect(mockNotificationCreate).not.toHaveBeenCalled()
   })
 })

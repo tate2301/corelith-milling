@@ -1413,6 +1413,46 @@ export async function emitRetailNotification(args: {
   }
 }
 
+/**
+ * A notice from an industry extension (`extensions/`), which has no
+ * notification type of its own. It goes out as an operations notice and
+ * carries the extension's page to open. `needsYou` puts it under "Needs you":
+ * work handed to the reader (a delivery to inspect, a plan to approve), as
+ * against news of something done. The actor is never told about their own work.
+ */
+export async function emitExtensionNotification(args: {
+  companyId: string
+  recipientIds: string[]
+  title: string
+  summary: string
+  /** The extension page that opens it, e.g. `/milling/intake/<id>`. */
+  viewPath: string
+  entityId: string
+  needsYou?: boolean
+  severity?: NotificationSeverity
+  actorId?: string | null
+}): Promise<void> {
+  try {
+    const recipientIds = args.recipientIds.filter((id) => Boolean(id) && id !== args.actorId)
+    if (recipientIds.length === 0) return
+    await createNotification(prisma, {
+      companyId: args.companyId,
+      actorId: args.actorId,
+      type: NotificationType.OPS_INCIDENT_CREATED,
+      title: args.title,
+      summary: args.summary,
+      severity: args.severity ?? NotificationSeverity.INFO,
+      recipientIds,
+      payload: { viewPath: args.viewPath, module: "operations", needsYou: args.needsYou ?? false },
+      entityType: NotificationEntityType.INCIDENT,
+      entityId: args.entityId,
+      sourceAction: NotificationSourceAction.STATUS_CHANGE,
+    })
+  } catch (error) {
+    console.error("[Notifications] emitExtensionNotification failed:", error)
+  }
+}
+
 export async function getCrmManagerRecipients(companyId: string, excludeId?: string): Promise<string[]> {
   return getManagerIds(companyId, excludeId)
 }
