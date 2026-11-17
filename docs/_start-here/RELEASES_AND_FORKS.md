@@ -61,7 +61,7 @@ Moving the fork's `stable` deploys every cell built from it.
 These are the only paths a fork may change (enforced by `boundary-lib.mjs`):
 
 - `FORK.md`
-- `extensions/index.ts` and `extensions/server.ts`
+- `extensions/index.ts`, `extensions/server.ts` and `extensions/nav-server.ts`
 - `extensions/<flavour>/**`
 - `lib/<flavour>/**`
 - `app/<flavour>/**`
@@ -98,6 +98,9 @@ load, so gating and provisioning treat it like a core vertical:
 | `routes.pages` / `routes.apis` | the route → feature registry | under `/<flavour>` / `/api/<flavour>/`, gated on own features |
 | `templates` | `CLIENT_BUNDLE_TEMPLATES` (provisioning) | code `TEMPLATE_<FLAVOUR>` or `TEMPLATE_<FLAVOUR>_…` |
 | `nav` | its own sidebar group `ext.<flavour>`, first among the tenant's products; further groups of its own (`nav.groups`, `ext.<flavour>.<key>`); rows added to a core group after core's own, or as a child of a core row (`nav.additions`, `into` and `under`) | row ids `<flavour>.<name>`, every address under `/<flavour>`; core's rows are never changed or hidden, and `top` and `saved` take no additions |
+| `nav.order` / `nav.labels` | while the tenant runs its product: the order of the sidebar's groups, core's and its own mixed, and the trade's words for core's groups and rows | ids of groups and rows that are drawn; words only, never what a row opens |
+| `management` on a row | a row that opens a Management row by id (Sites, Numbering), drawn with ↗, shown exactly when Management shows that row | the address must be that row's |
+| `registeredExtensionNav` in `extensions/nav-server.ts` | server-only: counts on its rows (`badges`), and a person's start page and phone bar (`persona`), served at `/api/extensions/nav` and used by the root redirect | counts only on its own addresses; a start page the person may not open, or a phone row that is not drawn, is dropped |
 | `product` | `VERTICAL_PRODUCT_BUNDLES` as `ext.<flavour>`; a GENERAL workspace holding any `<flavour>.` feature runs it (label above the sidebar, home) | home under `/<flavour>` |
 | `reports` | `REPORT_DEFINITIONS`, readable only with their feature | key `<flavour>-<name>`, `featureKey` its own, page under `/<flavour>` |
 | loaders in `extensions/server.ts` | the report loaders (server-only, may query) | same key as a report it declares; never a core key |

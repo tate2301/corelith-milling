@@ -26,6 +26,12 @@ export type ComposeArgs = {
   /** A trade's own words for a node or a child, by id. */
   labels?: Record<string, string>;
   groupLabels?: Partial<Record<NavGroupId, string>>;
+  /**
+   * The groups in the order the workspace wants them, where it wants its own
+   * (an extension's `nav.order`). Groups it leaves out follow in core's order;
+   * the top rows stay first.
+   */
+  order?: readonly NavGroupId[];
   nodes?: readonly NavNode[];
 };
 
@@ -46,8 +52,17 @@ function resolve(node: NavKid, canOpen: (href: string) => boolean): string | nul
  * any child does. One visible child adds nothing, so the parent opens it and
  * the child is dropped. A group with nothing in it is dropped.
  */
-export function composeNav({ canOpen, products = PRODUCT_GROUPS, labels = {}, groupLabels = {}, nodes = NAV_NODES }: ComposeArgs): ComposedGroup[] {
-  const order: NavGroupId[] = ["top", ...products.filter((id) => PRODUCT_GROUPS.includes(id)), ...SHARED_GROUP_ORDER];
+export function composeNav({
+  canOpen,
+  products = PRODUCT_GROUPS,
+  labels = {},
+  groupLabels = {},
+  order: wanted = [],
+  nodes = NAV_NODES,
+}: ComposeArgs): ComposedGroup[] {
+  const usual: NavGroupId[] = [...products.filter((id) => PRODUCT_GROUPS.includes(id)), ...SHARED_GROUP_ORDER];
+  const first = wanted.filter((id) => usual.includes(id));
+  const order: NavGroupId[] = ["top", ...first, ...usual.filter((id) => !first.includes(id))];
   const groups: ComposedGroup[] = [];
   for (const id of order) {
     const items: ComposedNode[] = [];

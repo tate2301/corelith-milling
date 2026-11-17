@@ -444,6 +444,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A row that opens a Management page (an extension's link into setup). */
+.out {
+  flex: none;
+  margin-left: auto;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
 .cnt.urgent {
   background: var(--bad);
   color: #ffffff;
