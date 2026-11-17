@@ -232,6 +232,8 @@ Steps: Tick · Raise by % or set margin · Review · Save. Screens: prices, bulk
 
 Steps: Start from a list · Rule: who, when, where · Adjust prices · Switch on. Screens: pricelists, pricelistnew, pricelistedit, addtolist.
 
+**First-list creation:** "Start from" also offers **Empty list** ("Set prices for each product"). This is selected when the workspace has no lists; it sends `startFrom: { empty: true }`, hides percentage adjustments, and creates an `OWN` list without inventing product prices. Inline creation with only a name and no source uses the same service when there are no live lists. An explicitly named invalid source is still refused. Cost-based creation does not require an existing default for currency/VAT metadata. With no base, currency comes from `AccountingSettings.baseCurrency` (USD if unset), and prices include VAT, matching retail provisioning. When there is no default, creation establishes one: it must be switched on, for everyone, always, at all sites, with no category restriction. Company-row locking serializes competing creations so exactly one becomes the default. Subsequent empty lists do not replace the default. Creation and its audit event remain atomic; no schema migration is needed.
+
 **Code today: missing.** Roles board: Owner C R U D, Manager C R U; Cashier and Bookkeeper read.
 
 | Step | UI | Server |
