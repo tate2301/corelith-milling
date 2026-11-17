@@ -18,7 +18,6 @@ import type { CompensationRule, EmployeeTaxStatus } from "@prisma/client";
 import {
   clampAtZero,
   money,
-  multiplyMoney,
   resolveBaseCurrency,
   resolveExchangeRate,
   sumMoney,
@@ -27,6 +26,7 @@ import {
 } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { calculateRuleAmount } from "@/lib/hr/payroll/rules";
+import { bandedOvertimePay, type OvertimeShift } from "@/lib/hr/payroll/overtime-bands";
 import {
   findStatutoryGaps,
   resolveNecAgreement,
@@ -95,6 +95,8 @@ export type AssembleEmployee = {
   dateOfBirth: Date | null;
   hasDisability: boolean;
   overtimeHourlyRate: Prisma.Decimal | null;
+  /** ISO weekdays this person does not work; overtime on one is paid at the rest-day band. */
+  restDays: number[];
 };
 
 export type AssembleProfile = {
@@ -145,6 +147,7 @@ export type AssembleResult = {
  */
 async function overtimePayByEmployee(
   input: {
+    companyId: string;
     employees: AssembleEmployee[];
     periodStart: Date;
     periodEnd: Date;
@@ -158,26 +161,35 @@ async function overtimePayByEmployee(
   );
   if (payable.length === 0) return new Map();
 
-  const rows = await db.attendance.groupBy({
-    by: ["employeeId"],
-    where: {
-      employeeId: { in: payable.map((employee) => employee.id) },
-      date: { gte: input.periodStart, lte: input.periodEnd },
-      overtime: { gt: 0 },
-    },
-    _sum: { overtime: true },
-  });
+  // Shift by shift, so each one's hours land in the bands for its kind of day
+  // (a rest day, a public holiday) rather than one sum for the period.
+  const [rows, bands] = await Promise.all([
+    db.attendance.findMany({
+      where: {
+        employeeId: { in: payable.map((employee) => employee.id) },
+        date: { gte: input.periodStart, lte: input.periodEnd },
+        overtime: { gt: 0 },
+      },
+      select: { employeeId: true, date: true, status: true, overtime: true },
+    }),
+    db.overtimeBand.findMany({
+      where: { companyId: input.companyId },
+      select: { dayKind: true, fromHours: true, toHours: true, multiplier: true },
+    }),
+  ]);
 
-  const rateById = new Map(
-    payable.map((employee) => [employee.id, employee.overtimeHourlyRate!]),
-  );
-  const byEmployee = new Map<string, Prisma.Decimal>();
+  const shiftsById = new Map<string, OvertimeShift[]>();
   for (const row of rows) {
-    const hours = row._sum.overtime ?? 0;
-    if (hours <= 0) continue;
-    const hourly = rateById.get(row.employeeId);
-    if (!hourly) continue;
-    byEmployee.set(row.employeeId, multiplyMoney(hours, hourly));
+    const list = shiftsById.get(row.employeeId) ?? [];
+    list.push({ date: row.date, status: row.status, hours: row.overtime ?? 0 });
+    shiftsById.set(row.employeeId, list);
+  }
+  const byEmployee = new Map<string, Prisma.Decimal>();
+  for (const employee of payable) {
+    const shifts = shiftsById.get(employee.id);
+    if (!shifts) continue;
+    const pay = bandedOvertimePay(shifts, bands, employee.overtimeHourlyRate!, employee.restDays ?? []);
+    if (pay.greaterThan(0)) byEmployee.set(employee.id, pay);
   }
   return byEmployee;
 }
@@ -297,6 +309,7 @@ export async function assembleSalaryRun(
       dateOfBirth: true,
       hasDisability: true,
       overtimeHourlyRate: true,
+      restDays: true,
     },
     orderBy: { name: "asc" },
   })) as AssembleEmployee[];
@@ -351,7 +364,7 @@ export async function assembleSalaryRun(
   })) as RuleForAssembly[];
 
   const overtimeByEmployee = await overtimePayByEmployee(
-    { employees, periodStart: input.periodStart, periodEnd: input.periodEnd },
+    { companyId: input.companyId, employees, periodStart: input.periodStart, periodEnd: input.periodEnd },
     db,
   );
 

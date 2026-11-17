@@ -54,9 +54,11 @@ const shift: ReportDefinition = {
 const attendance: ReportDefinition = {
   key: "attendance",
   title: "Attendance",
-  area: "Production",
+  area: "People",
   href: "/reports/attendance",
-  profiles: PROFILES,
+  // Every trade keeps an attendance register by shift and site, so the
+  // report is not a mine's: it is at the front of no one profile's catalogue.
+  profiles: [],
   params: [...periodParams(7), SITE],
   layout: {
     blocks: [

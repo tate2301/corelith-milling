@@ -11,6 +11,9 @@ datasource db {
 // ============================================
 
 model Company {
+  overtimeBands OvertimeBand[]
+  customerRoutes CustomerRoute[]
+  meterReadings MeterReading[]
   id                            String             @id @default(uuid())
   name                          String
   slug                          String             @unique
@@ -1422,6 +1425,8 @@ enum MemberKind {
 }
 
 model User {
+  customerRoutes CustomerRoute[] @relation("CustomerRouteRep")
+  meterReadingsRecorded MeterReading[] @relation("MeterReadingRecordedBy")
   retailEmptiesEntriesCreated RetailEmptiesEntry[] @relation("RetailEmptiesEntryCreatedBy")
   id                String    @id @default(uuid())
   /// Null for someone who only uses a till: they never sign in to the admin.
@@ -1827,6 +1832,8 @@ model Employee {
   /// contracts bank it as leave — and payroll then ignores `Attendance.overtime`
   /// rather than inventing a rate for it.
   overtimeHourlyRate Decimal? @db.Decimal(14, 4)
+  /// The weekdays this person does not work, ISO 1 (Monday) to 7. Overtime on one is paid at the rest-day band.
+  restDays Int[] @default([])
 
   // Where the money actually goes. `PayoutMethod` has had BANK and MOBILE
   // since it was written, but the disbursement route validates an enum of
@@ -4774,6 +4781,10 @@ model StockMovement {
   /// On a reversal: the movement it puts back. Unique, so a movement is
   /// reversed at most once.
   reversesId   String?  @unique
+  /// What the stock went into: fuel issued to a generator, a truck. Issues only.
+  equipmentId  String?
+  /// The equipment's meter when it was issued to (hours or km), kept with the issue.
+  meterReading Decimal? @db.Decimal(12, 1)
 
   createdAt DateTime @default(now())
 
@@ -4782,12 +4793,14 @@ model StockMovement {
   issuedBy   User?          @relation(fields: [issuedById], references: [id])
   reverses   StockMovement? @relation("StockMovementReversal", fields: [reversesId], references: [id], onDelete: Restrict)
   reversedBy StockMovement? @relation("StockMovementReversal")
+  equipment  Equipment?     @relation("StockMovementEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
 
   @@index([itemId])
   @@index([itemId, createdAt])
   @@index([toLocationId])
   @@index([createdAt])
   @@index([sourceType, sourceId])
+  @@index([equipmentId, createdAt])
 }
 
 /// Why stock moved, in the shop's words. Retail writes one on every movement;
@@ -6812,6 +6825,8 @@ model RetailSaleLine {
   /// PRD-05 — the price list the line was priced from; kept null once that list is purged.
   priceListId     String?
   itemName        String
+  /// The product's net weight per unit when it was sold (a 10 kg bag), so the till's sales read in tonnes.
+  netWeightKg     Decimal? @db.Decimal(10, 3)
   quantity        Decimal @default(0) @db.Decimal(12, 4)
   unitPrice       Decimal @default(0) @db.Decimal(14, 2)
   discountAmount  Decimal @default(0) @db.Decimal(14, 2)
@@ -6978,12 +6993,23 @@ model Equipment {
   lastServiceDate DateTime?
   nextServiceDue  DateTime?
 
+  /// What the equipment's meter counts: engine hours, kilometres, or nothing.
+  meterType          EquipmentMeterType @default(NONE)
+  /// The latest reading (`MeterReading`), in the meter's unit. Readings only go up.
+  currentMeter       Decimal?           @db.Decimal(12, 1)
+  meterReadAt        DateTime?
+  /// A vehicle's number plate; null for anything that is not on the road.
+  registrationNumber String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   site       Site          @relation(fields: [siteId], references: [id])
   location   StockLocation @relation(fields: [locationId], references: [id])
   workOrders WorkOrder[]
+  meterReadings MeterReading[]
+  customerRoutes CustomerRoute[] @relation("CustomerRouteVehicle")
+  stockIssues   StockMovement[] @relation("StockMovementEquipment")
 
   @@unique([siteId, equipmentCode])
   @@index([siteId])
@@ -7110,6 +7136,10 @@ enum AccountingSourceType {
   STOCK_ISSUE
   STOCK_ADJUSTMENT
   STOCK_TRANSFER
+  /// Raw material issued into production: inventory to work in progress.
+  PRODUCTION_ISSUE
+  /// Finished goods out of production: work in progress to inventory.
+  PRODUCTION_OUTPUT
   PAYROLL_RUN
   PAYROLL_DISBURSEMENT
   GOLD_PURCHASE
@@ -7802,6 +7832,12 @@ model Customer {
   priceListId      String?
   archivedAt       DateTime?
   mergedIntoId     String?
+  /// The delivery or sales round the customer is on, and their place in its order of stops.
+  routeId          String?
+  routeStop        Int?
+  /// Where the customer is, for the round and the map.
+  latitude         Float?
+  longitude        Float?
   createdById      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -7815,6 +7851,7 @@ model Customer {
   retailSales     RetailSale[]     @relation("RetailSaleCustomer")
   retailVouchers  RetailVoucher[]  @relation("RetailVoucherCustomer")
   priceList       PriceList?       @relation("CustomerPriceList", fields: [priceListId], references: [id], onDelete: SetNull)
+  route           CustomerRoute?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
   mergedInto      Customer?        @relation("CustomerMergedInto", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedFrom      Customer[]       @relation("CustomerMergedInto")
   createdBy       User?            @relation("CustomerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -7830,6 +7867,7 @@ model Customer {
   @@index([companyId, isActive])
   @@index([companyId, phone])
   @@index([companyId, archivedAt])
+  @@index([routeId, routeStop])
 }
 
 /// CUS-05 (W-45, W-63): a duplicate customer merged into another; every id it moved, so restoring
@@ -8110,6 +8148,11 @@ model SalesInvoiceLine {
   id          String   @id @default(uuid())
   invoiceId   String
   description String
+  /// The product sold, when the line is one; with its net weight per unit at the time, so sales read in tonnes.
+  productId   String?
+  netWeightKg Decimal? @db.Decimal(10, 3)
+  /// Taken off the line before tax.
+  discountAmount Float @default(0)
   quantity    Float    @default(1)
   unitPrice   Float    @default(0)
   taxCodeId   String?
@@ -8122,8 +8165,10 @@ model SalesInvoiceLine {
 
   invoice SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   taxCode TaxCode?     @relation(fields: [taxCodeId], references: [id])
+  product Product?     @relation("SalesInvoiceLineProduct", fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
+  @@index([productId])
 }
 
 model SalesQuotation {
@@ -15727,6 +15772,7 @@ model CrmCollectionNote {
 /// That separation is deliberate — a service has a Product and no stock at all,
 /// and a stocked product has one Product and one InventoryItem per site.
 model Product {
+  salesInvoiceLines SalesInvoiceLine[] @relation("SalesInvoiceLineProduct")
   id                 String        @id @default(uuid())
   companyId          String
   /// Code or SKU. Unique per company so imports and scanners agree.
@@ -17399,4 +17445,82 @@ model PettyCashVoucher {
 
   @@unique([companyId, voucherNo])
   @@index([companyId, bankAccountId, status])
+}
+
+enum EquipmentMeterType {
+  NONE
+  HOURS
+  KM
+}
+
+/// One reading of an equipment's meter: typed at a service, taken with a fuel
+/// issue or a trip. Readings only go up; the latest is `Equipment.currentMeter`.
+model MeterReading {
+  id           String   @id @default(uuid())
+  companyId    String
+  equipmentId  String
+  reading      Decimal  @db.Decimal(12, 1)
+  readAt       DateTime
+  /// Where it was taken: "FUEL_ISSUE", "SERVICE", "TRIP", "MANUAL", or an extension's own key.
+  source       String   @default("MANUAL")
+  sourceId     String?
+  recordedById String?
+  createdAt    DateTime @default(now())
+
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  equipment  Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  recordedBy User?     @relation("MeterReadingRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([equipmentId, readAt])
+  @@index([companyId, readAt])
+  @@index([source, sourceId])
+}
+
+/// A round of customers: the order a rep or a vehicle visits them in, and on which day.
+model CustomerRoute {
+  id        String   @id @default(uuid())
+  companyId String
+  code      String
+  name      String
+  /// ISO weekdays it runs on, 1 (Monday) to 7.
+  visitDays Int[]
+  /// Who works it: a rep, a vehicle, or both.
+  repUserId String?
+  vehicleId String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rep       User?      @relation("CustomerRouteRep", fields: [repUserId], references: [id], onDelete: SetNull)
+  vehicle   Equipment? @relation("CustomerRouteVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
+  customers Customer[]
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+}
+
+enum OvertimeDayKind {
+  WORKDAY
+  REST_DAY
+  HOLIDAY
+}
+
+/// How a company pays overtime hours: on a kind of day, the hours from
+/// `fromHours` up to `toHours` (open-ended when null) of one shift's overtime
+/// are paid at `multiplier` times the person's overtime rate. With no bands,
+/// every hour is paid at the rate.
+model OvertimeBand {
+  id         String          @id @default(uuid())
+  companyId  String
+  dayKind    OvertimeDayKind
+  fromHours  Decimal         @default(0) @db.Decimal(5, 2)
+  toHours    Decimal?        @db.Decimal(5, 2)
+  multiplier Decimal         @db.Decimal(4, 2)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, dayKind, fromHours])
 }

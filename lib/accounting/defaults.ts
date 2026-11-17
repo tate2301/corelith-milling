@@ -211,6 +211,8 @@ const BASE_CHART_OF_ACCOUNTS: DefaultAccount[] = [
     systemManaged: true,
   },
   { code: "1200", name: "Inventory", type: "ASSET", category: "Inventory", systemManaged: true },
+  // Material in production: raw stock issued into a run, not yet finished goods.
+  { code: "1210", name: "Work in progress", type: "ASSET", category: "Inventory", systemManaged: true },
   { code: "2000", name: "Accounts Payable", type: "LIABILITY", category: "Payables", systemManaged: true },
   // Books P2 (D12): goods in from a supplier whose bill has not been recorded yet. The bill clears it.
   { code: "2010", name: "Goods received, not billed", type: "LIABILITY", category: "Payables", systemManaged: true },
@@ -799,6 +801,24 @@ const BASE_POSTING_RULES: DefaultPostingRule[] = [
     lines: [
       { accountCode: "1200", direction: "DEBIT", basis: "AMOUNT", allocationValue: 100 },
       { accountCode: "2300", direction: "CREDIT", basis: "AMOUNT", allocationValue: 100 },
+    ],
+  },
+  {
+    // Raw material into production: it leaves stock and becomes work in progress.
+    name: "Production issue",
+    sourceType: "PRODUCTION_ISSUE",
+    lines: [
+      { accountCode: "1210", direction: "DEBIT", basis: "AMOUNT", allocationValue: 100 },
+      { accountCode: "1200", direction: "CREDIT", basis: "AMOUNT", allocationValue: 100 },
+    ],
+  },
+  {
+    // Finished goods out of production, at the run's cost: work in progress back into stock.
+    name: "Production output",
+    sourceType: "PRODUCTION_OUTPUT",
+    lines: [
+      { accountCode: "1200", direction: "DEBIT", basis: "AMOUNT", allocationValue: 100 },
+      { accountCode: "1210", direction: "CREDIT", basis: "AMOUNT", allocationValue: 100 },
     ],
   },
   {

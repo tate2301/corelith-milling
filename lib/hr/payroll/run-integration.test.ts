@@ -271,6 +271,37 @@ describe("Attendance.overtime finally reaches payroll", () => {
     await prisma.employee.delete({ where: { id: overtimeId } });
   });
 
+  it("pays each shift's hours by the company's bands, a rest day at its own", async () => {
+    const bandedId = await makeEmployee({ name: "Tsitsi Banda", employeeId: "EMP-OT9", overtimeHourlyRate: "4" });
+    await prisma.employee.update({ where: { id: bandedId }, data: { restDays: [6] } });
+    await giveProfile(bandedId, "1000");
+    await prisma.overtimeBand.createMany({
+      data: [
+        { companyId, dayKind: "WORKDAY", fromHours: 0, toHours: 2, multiplier: 1.5 },
+        { companyId, dayKind: "WORKDAY", fromHours: 2, multiplier: 2 },
+        { companyId, dayKind: "REST_DAY", fromHours: 0, multiplier: 2 },
+      ],
+    });
+    try {
+      await prisma.attendance.createMany({
+        data: [
+          // Monday 10 August, 3 hours: 2 × 4 × 1.5 + 1 × 4 × 2 = 20.
+          { employeeId: bandedId, companyId, siteId, date: new Date("2026-08-10T00:00:00.000Z"), shift: "DAY", status: "PRESENT", overtime: 3 },
+          // Saturday 15 August, a rest day, 5 hours: 5 × 4 × 2 = 40.
+          { employeeId: bandedId, companyId, siteId, date: new Date("2026-08-15T00:00:00.000Z"), shift: "DAY", status: "PRESENT", overtime: 5 },
+        ],
+      });
+      const result = await run({ employeeScopeIds: [bandedId] });
+      const overtime = result.lines[0].payroll.slices[0].components.find((c) => c.name === "Overtime");
+      expect(overtime?.amount.toString()).toBe("60");
+    } finally {
+      await prisma.overtimeBand.deleteMany({ where: { companyId } });
+      await prisma.attendance.deleteMany({ where: { employeeId: bandedId } });
+      await prisma.compensationProfile.deleteMany({ where: { employeeId: bandedId } });
+      await prisma.employee.delete({ where: { id: bandedId } });
+    }
+  });
+
   it("ignores overtime hours for an employee with no hourly rate", async () => {
     // Some contracts bank overtime as leave. Paying it at a guessed rate would
     // be worse than not paying it.

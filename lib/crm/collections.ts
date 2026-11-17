@@ -5,6 +5,7 @@
  * list into a plan, and a promise that came and went is a much stronger signal
  * than another day of silence.
  */
+import { AGE_BAND_LABELS, ageBand, daysPastDue, type AgeBandKey } from "@/lib/ageing";
 import type { CrmCollectionOutcome } from "@prisma/client";
 import { z } from "zod";
 
@@ -29,29 +30,27 @@ export const COLLECTION_OUTCOME_LABELS: Record<CrmCollectionOutcome, string> = {
 export const AGEING_BUCKETS = ["CURRENT", "D1_30", "D31_60", "D61_90", "D90_PLUS"] as const;
 export type AgeingBucket = (typeof AGEING_BUCKETS)[number];
 
-export const AGEING_LABELS: Record<AgeingBucket, string> = {
-  CURRENT: "Not yet due",
-  D1_30: "1–30 days",
-  D31_60: "31–60 days",
-  D61_90: "61–90 days",
-  D90_PLUS: "Over 90 days",
+/** The CRM's keys for the one ageing (`lib/ageing.ts`), in its order. */
+const BAND_OF: Record<AgeingBucket, AgeBandKey> = {
+  CURRENT: "current",
+  D1_30: "days30",
+  D31_60: "days60",
+  D61_90: "days90",
+  D90_PLUS: "over90",
 };
 
+export const AGEING_LABELS: Record<AgeingBucket, string> = Object.fromEntries(
+  AGEING_BUCKETS.map((bucket) => [bucket, AGE_BAND_LABELS[BAND_OF[bucket]]]),
+) as Record<AgeingBucket, string>;
+
+/** Whole days overdue, never below zero (`daysPastDue`). */
 export function daysOverdue(dueDate: Date | string | null, now: Date = new Date()): number {
-  if (!dueDate) return 0;
-  const due = typeof dueDate === "string" ? new Date(dueDate) : dueDate;
-  if (Number.isNaN(due.getTime())) return 0;
-  const days = Math.floor((now.getTime() - due.getTime()) / 86_400_000);
-  return Math.max(0, days);
+  return Math.max(0, daysPastDue(dueDate, now));
 }
 
 export function ageingBucket(dueDate: Date | string | null, now: Date = new Date()): AgeingBucket {
-  const days = daysOverdue(dueDate, now);
-  if (days === 0) return "CURRENT";
-  if (days <= 30) return "D1_30";
-  if (days <= 60) return "D31_60";
-  if (days <= 90) return "D61_90";
-  return "D90_PLUS";
+  const band = ageBand(daysPastDue(dueDate, now));
+  return AGEING_BUCKETS.find((bucket) => BAND_OF[bucket] === band)!;
 }
 
 export type CollectionItem = {

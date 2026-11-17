@@ -20,6 +20,7 @@ import type { AccountingSourceType, Prisma, StockMovement, StockMovementReason }
 
 import { reserveIdentifier } from "@/lib/id-generator";
 import { money, quantity as toQuantity, type MoneyLike, ZERO } from "@/lib/money";
+import { recordMeterReading } from "@/lib/maintenance/meters";
 import { prisma } from "@/lib/prisma";
 
 export type StockMovementType = "RECEIPT" | "ISSUE" | "ADJUSTMENT" | "TRANSFER";
@@ -58,8 +59,14 @@ export type RecordStockMovementInput = {
   quantity: MoneyLike;
   /** Must match the item's unit — a movement in the wrong unit is a wrong count. */
   unit: string;
-  /** Money, at `Decimal(14,2)`. What the shop paid for one of these. */
+  /**
+   * Money, at `Decimal(14,2)`. What the shop paid for one of these. On a
+   * receipt it is averaged with the line's cost over what is on hand
+   * (moving-average cost), unless `unitCostIsAverage` says it already is.
+   */
   unitCost?: MoneyLike;
+  /** The caller worked the new average out itself (a case broken into singles): the line takes `unitCost` as it is. */
+  unitCostIsAverage?: boolean;
   notes?: string | null;
   /** Required for `TRANSFER`, recorded but inert for the rest. */
   toLocationId?: string | null;
@@ -83,6 +90,14 @@ export type RecordStockMovementInput = {
    */
   referenceId?: string | null;
   issuedTo?: string | null;
+  /**
+   * What an issue went into: fuel to a generator, a truck. The equipment must
+   * be the company's; the issue is kept against it, so fuel per hour or per
+   * km is a query. Issues only.
+   */
+  equipmentId?: string | null;
+  /** The equipment's meter at the issue (hours or km); recorded as one of its readings. */
+  meterReading?: MoneyLike | null;
   requestedBy?: string | null;
   approvedBy?: string | null;
   photoUrl?: string | null;
@@ -194,6 +209,16 @@ async function writeMovement(
     }
   }
 
+  if (input.equipmentId || input.meterReading !== undefined && input.meterReading !== null) {
+    if (input.movementType !== "ISSUE") throw new Error("Only an issue goes into equipment.");
+    if (!input.equipmentId) throw new Error("A meter reading needs the equipment it was read from.");
+    const equipment = await tx.equipment.findUnique({
+      where: { id: input.equipmentId },
+      select: { site: { select: { companyId: true } } },
+    });
+    if (!equipment || equipment.site.companyId !== input.companyId) throw new Error("Invalid equipment.");
+  }
+
   const requested = toQuantity(input.quantity);
   const absoluteQuantity = requested.abs();
   if (input.movementType === "ISSUE" && item.currentStock.lessThan(absoluteQuantity)) {
@@ -274,6 +299,18 @@ async function writeMovement(
     throw new Error("Stock cannot be negative.");
   }
 
+  // Moving-average cost: a receipt at a cost is averaged with what is already
+  // on hand at the line's cost, so the value on the shelf moves in whole. A
+  // line with nothing on hand, or no cost yet, takes the receipt's cost.
+  let nextUnitCost: Prisma.Decimal | null = null;
+  if (input.unitCost !== undefined && input.unitCost !== null) {
+    const received = money(input.unitCost);
+    nextUnitCost =
+      input.movementType === "RECEIPT" && !input.unitCostIsAverage
+        ? movingAverageCost({ onHand: item.currentStock, unitCost: item.unitCost }, absoluteQuantity, received)
+        : received;
+  }
+
   const id = input.id ?? randomUUID();
   const createdAt = input.entryDate ?? new Date();
 
@@ -301,6 +338,9 @@ async function writeMovement(
       unit: input.unit,
       notes: input.notes ?? undefined,
       issuedTo: input.issuedTo ?? undefined,
+      equipmentId: input.equipmentId ?? undefined,
+      meterReading:
+        input.meterReading !== undefined && input.meterReading !== null ? toQuantity(input.meterReading) : undefined,
       requestedBy: input.requestedBy ?? undefined,
       approvedBy: input.approvedBy ?? undefined,
       photoUrl: input.photoUrl ?? undefined,
@@ -321,9 +361,24 @@ async function writeMovement(
     data: {
       currentStock: nextStock,
       ...(nextLocationId !== item.locationId ? { locationId: nextLocationId } : {}),
-      ...(input.unitCost !== undefined && input.unitCost !== null ? { unitCost: money(input.unitCost) } : {}),
+      ...(nextUnitCost !== null ? { unitCost: nextUnitCost } : {}),
     },
   });
+
+  if (input.equipmentId && input.meterReading !== undefined && input.meterReading !== null) {
+    await recordMeterReading(
+      {
+        companyId: input.companyId,
+        equipmentId: input.equipmentId,
+        reading: toQuantity(input.meterReading),
+        readAt: createdAt,
+        source: "FUEL_ISSUE",
+        sourceId: movement.id,
+        recordedById: input.userId,
+      },
+      tx,
+    );
+  }
 
   return {
     movement,
@@ -331,4 +386,20 @@ async function writeMovement(
     nextStock,
     locationId: nextLocationId,
   };
+}
+
+/**
+ * The line's cost after a receipt: what was on hand at its cost and what came
+ * in at the receipt's, averaged over them all, to the cent. Stock at no cost,
+ * or none on hand, does not dilute it.
+ */
+export function movingAverageCost(
+  before: { onHand: Prisma.Decimal; unitCost: Prisma.Decimal | null },
+  received: Prisma.Decimal,
+  receivedCost: Prisma.Decimal,
+): Prisma.Decimal {
+  const held = before.unitCost !== null && before.onHand.greaterThan(0) ? before.onHand : ZERO;
+  const total = held.plus(received);
+  if (total.lessThanOrEqualTo(0)) return receivedCost.toDecimalPlaces(2);
+  return held.times(before.unitCost ?? 0).plus(received.times(receivedCost)).dividedBy(total).toDecimalPlaces(2);
 }

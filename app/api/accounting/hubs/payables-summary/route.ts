@@ -1,8 +1,8 @@
+import { AGE_BAND_LABELS, ageBand, daysPastDue } from "@/lib/ageing";
 import { NextRequest, NextResponse } from "next/server";
 import { validateSession, successResponse, errorResponse } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 
-const DAY_MS = 1000 * 60 * 60 * 24;
 
 function parseDateParam(value: string | null) {
   if (!value) return null;
@@ -106,15 +106,12 @@ export async function GET(request: NextRequest) {
         bill.total - (bill.amountPaid ?? 0) - (bill.debitNoteTotal ?? 0) - (bill.writeOffTotal ?? 0);
       if (balance > 0 && (bill.status === "RECEIVED" || bill.status === "PAID")) {
         openBalance += balance;
-        const dueDate = bill.dueDate ?? bill.billDate;
-        const daysPastDue = Math.floor((asOf.getTime() - dueDate.getTime()) / DAY_MS);
-        if (daysPastDue > 0) overdueBalance += balance;
+        const late = daysPastDue(bill.dueDate ?? bill.billDate, asOf);
+        if (late > 0) overdueBalance += balance;
 
-        if (daysPastDue <= 0) aging.current += balance;
-        else if (daysPastDue <= 30) aging.days30 += balance;
-        else if (daysPastDue <= 60) aging.days60 += balance;
-        else if (daysPastDue <= 90) aging.days90 += balance;
-        else aging.days90Plus += balance;
+        // The one ageing (`lib/ageing.ts`), so this hub's bands are Books' bands.
+        const band = ageBand(late);
+        aging[band === "over90" ? "days90Plus" : band] += balance;
       }
 
       const key = dateKey(bill.billDate);
@@ -147,11 +144,11 @@ export async function GET(request: NextRequest) {
       },
       charts: {
         aging: [
-          { bucket: "Current", amount: aging.current },
-          { bucket: "1-30", amount: aging.days30 },
-          { bucket: "31-60", amount: aging.days60 },
-          { bucket: "61-90", amount: aging.days90 },
-          { bucket: "90+", amount: aging.days90Plus },
+          { bucket: AGE_BAND_LABELS.current, amount: aging.current },
+          { bucket: AGE_BAND_LABELS.days30, amount: aging.days30 },
+          { bucket: AGE_BAND_LABELS.days60, amount: aging.days60 },
+          { bucket: AGE_BAND_LABELS.days90, amount: aging.days90 },
+          { bucket: AGE_BAND_LABELS.over90, amount: aging.days90Plus },
         ],
         statusBreakdown: Array.from(statusMap.entries()).map(([status, count]) => ({
           status,
