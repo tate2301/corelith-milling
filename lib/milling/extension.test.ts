@@ -58,7 +58,23 @@ describe("the milling vertical", () => {
     expect(products[0]).toBe("ext.milling");
     const mill = composeNav({ canOpen: canOpenFor(manager), products }).find((group) => group.id === "ext.milling");
     expect(mill?.label).toBe("The mill");
-    expect(mill?.items.map((item) => item.href)).toEqual(["/milling"]);
+    expect(mill?.items.map((item) => item.href)).toEqual([
+      "/milling",
+      "/milling/plan",
+      "/milling/shifts",
+      "/milling/intake",
+      "/milling/production",
+      "/milling/quality",
+      "/milling/packing",
+      "/milling/stock",
+      "/milling/orders",
+      "/milling/deliveries",
+      "/milling/maintenance",
+      "/milling/exceptions",
+      "/milling/trace",
+      "/milling/reports",
+      "/milling/settings",
+    ]);
   });
 
   it("offers the mill's equipment categories to maintenance", () => {

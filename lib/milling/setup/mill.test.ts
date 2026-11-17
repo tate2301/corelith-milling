@@ -53,3 +53,21 @@ describe("the mill a workspace starts with", () => {
     ]);
   });
 });
+
+describe("the mill's settings data", () => {
+  it("names only equipment the mill has, in each stage", async () => {
+    const { MILL_STAGES, MILL_EQUIPMENT: equipment } = await import("./mill");
+    const codes = new Set(equipment.map((machine) => machine.code));
+    for (const stage of MILL_STAGES) for (const code of stage.equipment) expect(codes.has(code), `${stage.code} → ${code}`).toBe(true);
+  });
+
+  it("packs each product from a bulk product and a bag the mill stocks", async () => {
+    const { MILL_PACK_RECIPES, MILL_PRODUCTS: products } = await import("./mill");
+    const byCode = new Map(products.map((product) => [product.code, product]));
+    for (const recipe of MILL_PACK_RECIPES) {
+      expect(byCode.get(recipe.packed)?.unit).toBe("BAG");
+      expect(byCode.get(recipe.bulk)?.unit).toBe("KILOGRAM");
+      expect(byCode.get(recipe.bag)?.unit).toBe("EACH");
+    }
+  });
+});

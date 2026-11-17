@@ -18,9 +18,12 @@ export interface MillSite {
   location: string;
 }
 
+export type MillLocationKind = "STORE" | "BIN" | "SILO" | "PROCESS" | "DOCK" | "VEHICLE";
+
 export interface MillLocation {
   code: string;
   name: string;
+  kind: MillLocationKind;
 }
 
 export interface MillEquipment {
@@ -45,17 +48,17 @@ export interface MillProduct {
 export const MILL_SITE: MillSite = { code: "NORTON", name: "Norton mill", location: "Norton" };
 
 export const MILL_LOCATIONS: readonly MillLocation[] = [
-  { code: "RCV", name: "Maize receiving" },
-  { code: "MZ-STORE", name: "Maize store" },
-  { code: "BIN-1", name: "Bin 1 (conditioning)" },
-  { code: "PLANT", name: "Plant floor" },
-  { code: "MEAL-BIN", name: "Meal storage bin" },
-  { code: "BRAN", name: "Bran (bulk)" },
-  { code: "GEM", name: "Gem (bulk)" },
-  { code: "POWDER", name: "Powder (bulk)" },
-  { code: "FG", name: "Finished goods" },
-  { code: "PKG", name: "Packaging store" },
-  { code: "YARD", name: "Yard" },
+  { code: "RCV", kind: "DOCK", name: "Maize receiving" },
+  { code: "MZ-STORE", kind: "STORE", name: "Maize store" },
+  { code: "BIN-1", kind: "BIN", name: "Bin 1 (conditioning)" },
+  { code: "PLANT", kind: "PROCESS", name: "Plant floor" },
+  { code: "MEAL-BIN", kind: "BIN", name: "Meal storage bin" },
+  { code: "BRAN", kind: "STORE", name: "Bran (bulk)" },
+  { code: "GEM", kind: "STORE", name: "Gem (bulk)" },
+  { code: "POWDER", kind: "STORE", name: "Powder (bulk)" },
+  { code: "FG", kind: "STORE", name: "Finished goods" },
+  { code: "PKG", kind: "STORE", name: "Packaging store" },
+  { code: "YARD", kind: "STORE", name: "Yard" },
 ];
 
 /**
@@ -107,4 +110,84 @@ export const MILL_PRODUCTS: readonly MillProduct[] = [
   { code: "BAG-40", name: "Empty bag, 40 kg", kind: "MATERIAL", unit: "EACH", category: "Packaging" },
   { code: "BAG-50", name: "Empty bag, 50 kg", kind: "MATERIAL", unit: "EACH", category: "Packaging" },
   { code: "THREAD", name: "Sewing thread", kind: "MATERIAL", unit: "OTHER", unitLabel: "cone", category: "Packaging" },
+];
+
+export interface MillStage {
+  code: string;
+  name: string;
+  required: boolean;
+  capturesQuantities: boolean;
+  /** `MILL_EQUIPMENT` codes that do the stage's work. */
+  equipment: string[];
+}
+
+/** The client's route, intake to packing (plan v2, 3.2). */
+export const MILL_STAGES: readonly MillStage[] = [
+  { code: "INTAKE", name: "Intake", required: true, capturesQuantities: true, equipment: ["AUG-INTAKE"] },
+  { code: "PRECLEAN", name: "Pre-cleaning", required: true, capturesQuantities: true, equipment: ["PC-1"] },
+  { code: "DESTONE", name: "Destoning", required: true, capturesQuantities: true, equipment: ["PC-2"] },
+  { code: "CONDITION", name: "Conditioning", required: true, capturesQuantities: true, equipment: ["COND", "BIN-1"] },
+  { code: "DEGERM", name: "Degermination", required: true, capturesQuantities: true, equipment: ["AUG-DEG", "DEG-1", "DEG-2"] },
+  { code: "ASPIRATE", name: "Aspiration", required: false, capturesQuantities: true, equipment: ["AUG-UPRIGHT", "ASP"] },
+  { code: "CONVEY", name: "Conveying to milling", required: false, capturesQuantities: false, equipment: ["ELEV", "PNEU", "AIRLOCK"] },
+  { code: "MILL", name: "Milling and sifting", required: true, capturesQuantities: true, equipment: ["RM", "SIFT"] },
+  { code: "STORE", name: "Meal storage", required: true, capturesQuantities: true, equipment: ["AUG-MEAL", "MEAL-BIN"] },
+  { code: "PACK", name: "Inspection and packing", required: true, capturesQuantities: true, equipment: ["SEW"] },
+];
+
+export interface MillQcSpec {
+  point: "INCOMING_MAIZE" | "FINISHED_PRODUCT";
+  code: string;
+  name: string;
+  method: "VISUAL" | "INSTRUMENT";
+  resultType: "NUMERIC" | "PASS_FAIL";
+  unit?: string;
+  maxValue?: number;
+  guidance: string;
+}
+
+/** The checks the client makes: visual, plus the moisture meter (plan v2, 3.4). */
+export const MILL_QC_SPECS: readonly MillQcSpec[] = [
+  { point: "INCOMING_MAIZE", code: "MOISTURE", name: "Moisture", method: "INSTRUMENT", resultType: "NUMERIC", unit: "%", maxValue: 12.5, guidance: "Moisture meter reading. Over the limit: hold the lot." },
+  { point: "INCOMING_MAIZE", code: "VARIETY", name: "Variety and colour", method: "VISUAL", resultType: "PASS_FAIL", guidance: "Predominantly white. Note any purple or yellow grain." },
+  { point: "INCOMING_MAIZE", code: "INSECTS", name: "Insect infestation", method: "VISUAL", resultType: "PASS_FAIL", guidance: "No live insects. Live insects: hold the lot." },
+  { point: "INCOMING_MAIZE", code: "FOREIGN", name: "Foreign matter", method: "VISUAL", resultType: "PASS_FAIL", guidance: "No stones, sticks, glass or other grain beyond a trace." },
+  { point: "FINISHED_PRODUCT", code: "COLOUR", name: "Colour", method: "VISUAL", resultType: "PASS_FAIL", guidance: "Uniform natural colour." },
+  { point: "FINISHED_PRODUCT", code: "APPEARANCE", name: "Appearance", method: "VISUAL", resultType: "PASS_FAIL", guidance: "No discoloration or lumps." },
+  { point: "FINISHED_PRODUCT", code: "FOREIGN", name: "Foreign matter", method: "VISUAL", resultType: "PASS_FAIL", guidance: "None visible." },
+  { point: "FINISHED_PRODUCT", code: "GRANULATION", name: "Granulation", method: "VISUAL", resultType: "PASS_FAIL", guidance: "Even particle size; no excess fines or coarse." },
+];
+
+export const MILL_DESTINATIONS: readonly { code: string; name: string }[] = [
+  { code: "SHAMVA", name: "Shamva" },
+  { code: "MAZOWE", name: "Mazowe" },
+  { code: "NYABIRA", name: "Nyabira" },
+  { code: "HATCLIFFE", name: "Hatcliffe" },
+];
+
+/** A starting list for the crew of seven; the client confirms their duties (DECISIONS.md, D6). */
+export const MILL_SHIFT_DUTIES: readonly { code: string; name: string }[] = [
+  { code: "SUPERVISOR", name: "Shift supervisor" },
+  { code: "INTAKE", name: "Intake and cleaning" },
+  { code: "CONDITION", name: "Conditioning" },
+  { code: "DEGERM", name: "Degermination" },
+  { code: "MILL", name: "Roller mills and sifting" },
+  { code: "PACK", name: "Packing" },
+  { code: "SEW", name: "Sewing and stacking" },
+];
+
+export interface MillPackRecipe {
+  packed: string;
+  bulk: string;
+  bag: string;
+  /** Thread per bag is to be confirmed by the client: unset until then. */
+}
+
+/** Each packed product: from its bulk product, in its own bag. */
+export const MILL_PACK_RECIPES: readonly MillPackRecipe[] = [
+  { packed: "MEAL-5", bulk: "MEAL-BULK", bag: "BAG-5" },
+  { packed: "MEAL-10", bulk: "MEAL-BULK", bag: "BAG-10" },
+  { packed: "BRAN-25", bulk: "BRAN-BULK", bag: "BAG-25" },
+  { packed: "GEM-40", bulk: "GEM-BULK", bag: "BAG-40" },
+  { packed: "POWDER-50", bulk: "POWDER-BULK", bag: "BAG-50" },
 ];

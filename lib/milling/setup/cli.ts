@@ -42,7 +42,7 @@ function report(seed: SeedMillResult) {
   console.log(
     `Mill: site ${seed.site.created ? "created" : "already there"}, ` +
       `${seed.locationsCreated} locations, ${seed.equipmentCreated} machines and vehicles, ` +
-      `${seed.productsCreated} products added.`,
+      `${seed.productsCreated} products and ${seed.settingsCreated} settings added.`,
   );
 }
 

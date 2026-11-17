@@ -74,7 +74,8 @@ The sync also runs weekly and can be started by hand ("Fork · upstream sync").
 - They point at core tables by id columns only, such as `companyId`, `siteId`
   and `productId`. They never declare a Prisma relation that would need a field
   on a core model.
-- Foreign keys are written in the migration SQL.
+- There are no database foreign keys to core tables (`docs/milling/DECISIONS.md`, D2):
+  every row carries `companyId`, and services check ids before writing.
 - Migration folders are named `<timestamp>_milling_<name>`.
 - Never run `prisma db push` against a cell.
 - A migration that has merged is never edited.

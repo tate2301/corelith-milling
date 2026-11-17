@@ -1,0 +1,800 @@
+// The milling vertical's tables (FORK.md, "Database rules").
+//
+// They point at core tables through id columns only (companyId, userId,
+// siteId, productId...). Foreign keys to core are written in the migration
+// SQL, so no core model gains a back-relation field.
+
+/// A person's place in one of the mill's permission groups (lib/milling/access/groups.ts).
+model MillingGroupMember {
+  id          String   @id @default(uuid())
+  companyId   String
+  userId      String
+  /// A MillGroupCode: MANAGEMENT, SUPERVISOR, STORES, QUALITY, OPERATOR, DISPATCH, DRIVER, ADMIN.
+  groupCode   String
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  @@unique([userId, groupCode])
+  @@index([companyId, groupCode])
+}
+
+/// The mill's own settings, one row per workspace.
+model MillingSettings {
+  id                          String   @id @default(uuid())
+  companyId                   String   @unique
+  /// A batch whose material balance is off by more than this raises an exception.
+  reconciliationTolerancePct  Decimal  @default(2) @db.Decimal(5, 2)
+  /// What one intake bag is taken to weigh when maize is counted in bags.
+  defaultIntakeBagKg          Decimal  @default(50) @db.Decimal(8, 2)
+  /// Overtime is worked out against this many hours a shift.
+  shiftHours                  Decimal  @default(8.5) @db.Decimal(4, 2)
+  /// The usual crew on a shift.
+  shiftCrewSize               Int      @default(7)
+  /// Planning: maize needed = planned output / (1 - this %), for cleaning losses and moisture.
+  plannedLossPct              Decimal  @default(3) @db.Decimal(5, 2)
+  updatedAt                   DateTime @updatedAt
+  updatedById                 String?
+}
+
+/// What a stock location is at the mill: its kind and how much it holds.
+model MillingLocationProfile {
+  id              String   @id @default(uuid())
+  companyId       String
+  /// The core StockLocation.
+  stockLocationId String   @unique
+  /// STORE, BIN, SILO, PROCESS, DOCK or VEHICLE.
+  kind            String
+  capacityKg      Decimal? @db.Decimal(14, 2)
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+/// A step of the mill's process route, in order.
+model MillingProcessStage {
+  id                 String   @id @default(uuid())
+  companyId          String
+  code               String
+  name               String
+  sequence           Int
+  /// A batch cannot complete without a record for a required stage.
+  required           Boolean  @default(true)
+  /// Whether the stage records input and removed quantities, or only time and downtime.
+  capturesQuantities Boolean  @default(true)
+  /// Codes of the core Equipment that does the work, for downtime and the stage form.
+  equipmentCodes     String[] @default([])
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, sequence])
+}
+
+/// One check the mill makes, at intake or on finished product.
+model MillingQcSpec {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// INCOMING_MAIZE or FINISHED_PRODUCT.
+  point       String
+  code        String
+  name        String
+  /// VISUAL or INSTRUMENT.
+  method      String
+  /// NUMERIC (a reading against limits) or PASS_FAIL.
+  resultType  String
+  unit        String?
+  minValue    Decimal? @db.Decimal(12, 3)
+  maxValue    Decimal? @db.Decimal(12, 3)
+  /// What a pass looks like, shown next to the result.
+  guidance    String?
+  /// A required check that is not performed blocks release until overridden.
+  required    Boolean  @default(true)
+  /// Raised on every change, so a result keeps the version it was judged against.
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, point, code])
+}
+
+/// A place the mill delivers to.
+model MillingDestination {
+  id         String   @id @default(uuid())
+  companyId  String
+  code       String
+  name       String
+  distanceKm Decimal? @db.Decimal(8, 1)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([companyId, code])
+}
+
+/// A vehicle's delivery details; the vehicle itself is core Equipment (category VEHICLE).
+model MillingVehicleProfile {
+  id                 String   @id @default(uuid())
+  companyId          String
+  equipmentId        String   @unique
+  registrationNumber String?
+  /// Most it may carry; loading over it is refused.
+  capacityKg         Decimal? @db.Decimal(10, 2)
+  /// The core User who usually drives it.
+  driverUserId       String?
+  updatedAt          DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+/// A duty on the shift (e.g. "Roller mill operator"), for allocating the crew.
+model MillingShiftDuty {
+  id        String   @id @default(uuid())
+  companyId String
+  code      String
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, code])
+}
+
+/// How one packed product is made: bulk product, bag and thread per bag.
+model MillingPackRecipe {
+  id              String   @id @default(uuid())
+  companyId       String
+  /// The packed Product (unit BAG), e.g. Mealie meal 10 kg.
+  packedProductId String   @unique
+  bulkProductId   String
+  bagProductId    String?
+  /// Bulk kg in one bag; normally the packed product's net weight.
+  kgPerBag        Decimal  @db.Decimal(8, 3)
+  threadPerBag    Decimal? @db.Decimal(8, 4)
+  isActive        Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+/// One field of a submitted or approved mill record, changed with a reason (DECISIONS.md, D8).
+model MillingAmendment {
+  id         String   @id @default(uuid())
+  companyId  String
+  /// The record's kind, e.g. "MillingIntake".
+  entityType String
+  entityId   String
+  field      String
+  oldValue   Json?
+  newValue   Json?
+  reason     String
+  amendedById String
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, entityType, entityId, createdAt])
+}
+
+/// A lot: one intake of maize, one batch's output of a product, or one pack run (DECISIONS.md, D7).
+model MillingLot {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// M-YYMMDD-NN for maize; batch code + product for bulk; and so on.
+  code        String
+  /// The core Product.
+  productId   String
+  /// AVAILABLE, HOLD, REJECTED or CONSUMED.
+  status      String   @default("HOLD")
+  /// INTAKE, BATCH, PACK, OPENING or RETURN, and the record it came from.
+  originType  String
+  originId    String?
+  producedAt  DateTime @default(now())
+  /// Readings that travel with the lot, e.g. { moisturePct: 12.1, variety: "white" }.
+  attributes  Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  balances  MillingLotBalance[]
+  movements MillingLotMovement[]
+
+  @@unique([companyId, code])
+  @@index([companyId, productId, status])
+}
+
+/// How much of a lot is at one location, and how much of that is promised.
+model MillingLotBalance {
+  id              String     @id @default(uuid())
+  companyId       String
+  lotId           String
+  /// The core StockLocation (a bin, a store, the process line).
+  stockLocationId String
+  quantity        Decimal    @default(0) @db.Decimal(14, 3)
+  reserved        Decimal    @default(0) @db.Decimal(14, 3)
+  updatedAt       DateTime   @updatedAt
+
+  lot MillingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@unique([lotId, stockLocationId])
+  @@index([companyId, stockLocationId])
+}
+
+/// One change to a lot's quantity at a location, linked to core's movement when the total changed.
+model MillingLotMovement {
+  id               String     @id @default(uuid())
+  companyId        String
+  lotId            String
+  /// Where it left from and arrived at; one is null for a receipt or an issue.
+  fromLocationId   String?
+  toLocationId     String?
+  /// Always positive, in the product's unit (kg for maize and bulk, bags for packed).
+  quantity         Decimal    @db.Decimal(14, 3)
+  /// INTAKE_RECEIPT, BIN_MOVE, PRODUCTION_ISSUE, PRODUCTION_OUTPUT, PACK_ISSUE, PACK_OUTPUT,
+  /// PACK_RETURN, DESPATCH, DELIVERY_RETURN, QC_DISPOSAL, COUNT_ADJUSTMENT, OPENING.
+  reason           String
+  /// Core's StockMovement, when this changed the mill's on-hand total, or the
+  /// till's sale this matched (GATE_SALE), so a sale is never matched twice.
+  stockMovementId  String?
+  sourceType       String
+  sourceId         String?
+  /// Weighed or counted, or worked out.
+  isEstimated      Boolean    @default(false)
+  createdById      String
+  createdAt        DateTime   @default(now())
+
+  lot MillingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([lotId, createdAt])
+  @@index([companyId, sourceType, sourceId])
+  @@index([stockMovementId])
+}
+
+/// Stock promised to a production order, a batch or a customer order before it moves.
+model MillingReservation {
+  id              String   @id @default(uuid())
+  companyId       String
+  lotId           String
+  stockLocationId String
+  quantity        Decimal  @db.Decimal(14, 3)
+  sourceType      String
+  sourceId        String
+  /// ACTIVE, RELEASED or FULFILLED.
+  status          String   @default("ACTIVE")
+  createdById     String
+  createdAt       DateTime @default(now())
+  closedAt        DateTime?
+
+  @@index([companyId, status])
+  @@index([lotId, status])
+  @@index([companyId, sourceType, sourceId])
+}
+
+/// Something that went wrong and needs an authorised decision before work goes on.
+model MillingException {
+  id               String    @id @default(uuid())
+  companyId        String
+  /// EX-YYMMDD-NN.
+  code             String
+  /// QC_FAIL, QC_NOT_PERFORMED, BREAKDOWN, STOCK_DISCREPANCY, RECONCILIATION_VARIANCE,
+  /// OVER_CAPACITY, DELIVERY_SHORTAGE, DAMAGE.
+  type             String
+  /// LOW, MEDIUM or HIGH.
+  severity         String    @default("MEDIUM")
+  /// A blocking exception stops the next step on its record until it is decided.
+  blocking         Boolean   @default(true)
+  /// The record it is about: its kind ("MillingIntake", "MillingLot"...) and id.
+  targetType       String
+  targetId         String
+  title            String
+  detail           String?
+  /// The decisions it allows, e.g. ["ACCEPT", "HOLD", "REJECT"].
+  allowedDecisions String[]
+  /// OPEN or DECIDED.
+  status           String    @default("OPEN")
+  decision         String?
+  decisionNote     String?
+  decidedById      String?
+  decidedAt        DateTime?
+  raisedById       String?
+  /// When the people who decide were told; null until they are.
+  notifiedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@unique([companyId, code])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, targetType, targetId])
+}
+
+/// A delivery of maize: who brought it, what it weighed and how, and what QC decided.
+model MillingIntake {
+  id              String    @id @default(uuid())
+  companyId       String
+  /// MI-YYMMDD-NN.
+  code            String
+  /// The core Vendor, when the supplier is on file; the name is kept either way.
+  supplierId      String?
+  supplierName    String
+  /// The core Product received, normally white maize.
+  productId       String
+  deliveryRef     String?
+  vehicleReg      String?
+  driverName      String?
+  variety         String?
+  /// BAG_COUNT, EXTERNAL_TICKET or SUPPLIER_DECLARED.
+  weighMethod     String
+  bags            Int?
+  bagKg           Decimal?  @db.Decimal(8, 2)
+  grossKg         Decimal?  @db.Decimal(12, 2)
+  tareKg          Decimal?  @db.Decimal(12, 2)
+  netKg           Decimal   @db.Decimal(12, 2)
+  ticketNumber    String?
+  /// What the mill pays a tonne, when agreed at the gate; it values the lot.
+  pricePerTonne   Decimal?  @db.Decimal(12, 2)
+  /// The core PurchaseBill (Books) raised for this delivery.
+  billId          String?
+  /// An upload of the ticket or delivery note.
+  ticketFileUrl   String?
+  /// PROVISIONAL until a weighbridge ticket confirms it; VERIFIED after.
+  weightStatus    String    @default("PROVISIONAL")
+  /// AWAITING_QC, HELD, ACCEPTED, REJECTED or CANCELLED.
+  status          String    @default("AWAITING_QC")
+  /// The bin or store it goes into on acceptance.
+  binLocationId   String?
+  lotId           String?
+  notes           String?
+  receivedAt      DateTime  @default(now())
+  receivedById    String
+  decidedById     String?
+  decidedAt       DateTime?
+  decisionNote    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status, receivedAt])
+}
+
+/// One inspection: of an intake, or of a lot of product before release.
+model MillingQcInspection {
+  id            String    @id @default(uuid())
+  companyId     String
+  /// INCOMING_MAIZE or FINISHED_PRODUCT.
+  point         String
+  /// "MillingIntake" or "MillingLot", and its id.
+  targetType    String
+  targetId      String
+  inspectedById String
+  inspectedAt   DateTime  @default(now())
+  /// PASS when every required check passed; FAIL or INCOMPLETE otherwise.
+  outcome       String
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  results MillingQcResult[]
+
+  @@index([companyId, targetType, targetId])
+  @@index([companyId, point, inspectedAt])
+}
+
+/// One check's result, judged against the version of the check in force.
+model MillingQcResult {
+  id           String   @id @default(uuid())
+  inspectionId String
+  specId       String
+  specVersion  Int
+  specCode     String
+  specName     String
+  /// VISUAL, INSTRUMENT or NOT_PERFORMED. Not performed is never a pass.
+  method       String
+  value        Decimal? @db.Decimal(12, 3)
+  passed       Boolean?
+  note         String?
+
+  inspection MillingQcInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+}
+
+/// A count of one location: what was found in each lot against what the ledger said.
+model MillingStockCount {
+  id              String    @id @default(uuid())
+  companyId       String
+  /// SC-YYMMDD-NN.
+  code            String
+  stockLocationId String
+  /// POSTED when every line is within tolerance or the variance was approved; AWAITING_DECISION otherwise; DISCARDED.
+  status          String
+  countedById     String
+  countedAt       DateTime  @default(now())
+  postedAt        DateTime?
+  notes           String?
+
+  lines MillingStockCountLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, countedAt])
+}
+
+model MillingStockCountLine {
+  id       String  @id @default(uuid())
+  countId  String
+  lotId    String
+  expected Decimal @db.Decimal(14, 3)
+  counted  Decimal @db.Decimal(14, 3)
+
+  count MillingStockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+
+  @@index([countId])
+}
+
+/// A plan to produce: what, when, on which shift. Approval reserves the maize.
+model MillingProductionOrder {
+  id             String    @id @default(uuid())
+  companyId      String
+  /// PO-YYMMDD-NN.
+  code           String
+  productionDate DateTime  @db.Date
+  /// DAY or NIGHT.
+  shiftKind      String
+  supervisorId   String?
+  /// DRAFT, SUBMITTED, APPROVED, IN_PROGRESS, COMPLETED, CLOSED or CANCELLED.
+  status         String    @default("DRAFT")
+  /// Worked out from the lines when submitted.
+  maizeNeededKg  Decimal   @default(0) @db.Decimal(14, 3)
+  /// Approved although maize or packaging was short; the reason is on the audit chain.
+  approvedShort  Boolean   @default(false)
+  notes          String?
+  createdById    String
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  lines MillingProductionOrderLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, productionDate])
+}
+
+model MillingProductionOrderLine {
+  id        String  @id @default(uuid())
+  orderId   String
+  /// The core Product planned: a packed product (bags) or a bulk one (kg).
+  productId String
+  bags      Int?
+  kg        Decimal @db.Decimal(14, 3)
+
+  order MillingProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// One shift at the mill: day or night, its crew, and what was left in the line at the end.
+model MillingShift {
+  id                  String    @id @default(uuid())
+  companyId           String
+  /// SH-YYMMDD-D or SH-YYMMDD-N, by the date the shift starts.
+  code                String
+  /// DAY or NIGHT.
+  kind                String
+  /// Date-times, so a night shift runs past midnight.
+  scheduledStart      DateTime
+  scheduledEnd        DateTime
+  actualStart         DateTime?
+  actualEnd           DateTime?
+  supervisorId        String?
+  /// PLANNED, OPEN, CLOSED or APPROVED.
+  status              String    @default("PLANNED")
+  /// Material left in machines and bins at close, by estimate or measure.
+  materialInProcessKg Decimal?  @db.Decimal(14, 3)
+  materialEstimated   Boolean   @default(true)
+  handoverNotes       String?
+  approvedById        String?
+  approvedAt          DateTime?
+  createdById         String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  assignments MillingShiftAssignment[]
+
+  @@unique([companyId, code])
+  @@index([companyId, scheduledStart])
+}
+
+/// One person on a shift: their duty and their time. Approval writes core Attendance.
+model MillingShiftAssignment {
+  id            String    @id @default(uuid())
+  shiftId       String
+  /// The core Employee.
+  employeeId    String
+  dutyId        String?
+  /// PRESENT, ABSENT, LATE or ON_LEAVE.
+  attendance    String    @default("PRESENT")
+  clockIn       DateTime?
+  clockOut      DateTime?
+  breakMinutes  Int       @default(0)
+  /// Worked out against the mill's shift length when the shift closes.
+  overtimeHours Decimal   @default(0) @db.Decimal(5, 2)
+  absenceReason String?
+
+  shift MillingShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, employeeId])
+}
+
+/// A batch: maize from one or more lots through the route to bulk product.
+model MillingBatch {
+  id                 String    @id @default(uuid())
+  companyId          String
+  /// B-YYMMDD-NN.
+  code               String
+  orderId            String?
+  /// The shift it started on; stage records carry the shift each was done on.
+  shiftId            String?
+  /// OPEN, IN_PROGRESS, AWAITING_DECISION or COMPLETED.
+  status             String    @default("OPEN")
+  maizeIssuedKg      Decimal   @default(0) @db.Decimal(14, 3)
+  /// Value of the maize issued, at the stock line's cost when it was issued.
+  maizeCost          Decimal   @default(0) @db.Decimal(14, 2)
+  waterAddedKg       Decimal   @default(0) @db.Decimal(14, 3)
+  /// Material in the line when the batch closed, less when it opened.
+  inProcessChangeKg  Decimal?  @db.Decimal(14, 3)
+  outputKg           Decimal?  @db.Decimal(14, 3)
+  separatedKg        Decimal?  @db.Decimal(14, 3)
+  unaccountedKg      Decimal?  @db.Decimal(14, 3)
+  variancePct        Decimal?  @db.Decimal(7, 3)
+  /// Extraction % per output product: { "MEAL-BULK": 72.4, ... }.
+  yields             Json?
+  startedAt          DateTime  @default(now())
+  completedAt        DateTime?
+  completedById      String?
+  createdById        String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  sources MillingBatchSourceLot[]
+  stages  MillingStageRecord[]
+  outputs MillingBatchOutput[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([orderId])
+}
+
+model MillingBatchSourceLot {
+  id              String   @id @default(uuid())
+  batchId         String
+  lotId           String
+  stockLocationId String
+  quantityKg      Decimal  @db.Decimal(14, 3)
+  issuedAt        DateTime @default(now())
+
+  batch MillingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([lotId])
+}
+
+/// What happened at one stage of a batch.
+model MillingStageRecord {
+  id                 String    @id @default(uuid())
+  batchId            String
+  stageId            String
+  stageCode          String
+  shiftId            String?
+  equipmentCodes     String[]  @default([])
+  operatorId         String
+  startedAt          DateTime
+  endedAt            DateTime?
+  inputKg            Decimal?  @db.Decimal(14, 3)
+  inputEstimated     Boolean   @default(true)
+  /// Removed or rejected material: dust, husks, stones, aspirated fines.
+  removedKg          Decimal?  @db.Decimal(14, 3)
+  removedEstimated   Boolean   @default(true)
+  /// Conditioning: water added, and the moisture read before and after.
+  waterLitres        Decimal?  @db.Decimal(10, 2)
+  moistureBeforePct  Decimal?  @db.Decimal(5, 2)
+  moistureAfterPct   Decimal?  @db.Decimal(5, 2)
+  observations       String?
+  abnormal           Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+
+  batch MillingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+/// Bulk product from a batch into its lot, on hold until QC releases it.
+model MillingBatchOutput {
+  id              String   @id @default(uuid())
+  batchId         String
+  productId       String
+  lotId           String
+  stockLocationId String
+  quantityKg      Decimal  @db.Decimal(14, 3)
+  isEstimated     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  batch MillingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+/// A pack run: bulk product and bags in, packed bags out.
+model MillingPackRun {
+  id               String   @id @default(uuid())
+  companyId        String
+  /// PK-YYMMDD-NN.
+  code             String
+  recipeId         String
+  bulkLotId        String
+  bulkLocationId   String
+  /// Where the packed bags go.
+  outputLocationId String
+  outputLotId      String
+  bagsPacked       Int
+  damagedBags      Int      @default(0)
+  bulkUsedKg       Decimal  @db.Decimal(14, 3)
+  /// Bulk used beyond bags x kg a bag: giveaway when positive.
+  varianceKg       Decimal  @db.Decimal(14, 3)
+  /// Sample of actual net weights, kg.
+  checkWeights     Decimal[] @db.Decimal(8, 3)
+  shiftId          String?
+  packedById       String
+  packedAt         DateTime @default(now())
+
+  @@unique([companyId, code])
+  @@index([companyId, packedAt])
+}
+
+/// A machine's state at the mill. A broken machine cannot be used in a stage until it is released.
+model MillingEquipmentState {
+  id           String   @id @default(uuid())
+  companyId    String
+  equipmentId  String   @unique
+  /// AVAILABLE, DOWN, IN_REPAIR or AWAITING_RELEASE.
+  availability String   @default("AVAILABLE")
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId, availability])
+}
+
+/// Time a machine or the line was stopped.
+model MillingDowntime {
+  id          String    @id @default(uuid())
+  companyId   String
+  equipmentId String?
+  batchId     String?
+  shiftId     String?
+  stageCode   String?
+  /// BREAKDOWN, POWER, MATERIAL, PLANNED or OTHER.
+  category    String
+  cause       String
+  startedAt   DateTime
+  endedAt     DateTime?
+  /// The core WorkOrder raised for a breakdown.
+  workOrderId String?
+  reportedById String
+  releasedById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([companyId, startedAt])
+  @@index([equipmentId, startedAt])
+}
+
+/// A generator run: hours, fuel and why it ran.
+model MillingGeneratorRun {
+  id           String    @id @default(uuid())
+  companyId    String
+  equipmentId  String?
+  startedAt    DateTime
+  endedAt      DateTime
+  litres       Decimal   @db.Decimal(10, 2)
+  meterStart   Decimal?  @db.Decimal(12, 1)
+  meterEnd     Decimal?  @db.Decimal(12, 1)
+  reason       String?
+  recordedById String
+  createdAt    DateTime  @default(now())
+
+  @@index([companyId, startedAt])
+}
+
+/// A customer's order for packed product. Confirming it reserves bags, oldest lot first.
+model MillingCustomerOrder {
+  id            String    @id @default(uuid())
+  companyId     String
+  /// CO-YYMMDD-NN.
+  code          String
+  /// The core Customer.
+  customerId    String
+  destinationId String?
+  requiredDate  DateTime? @db.Date
+  /// DRAFT, CONFIRMED, IN_DELIVERY, DELIVERED, CLOSED or CANCELLED.
+  status        String    @default("DRAFT")
+  /// The core SalesInvoice (Books) drafted from what was delivered.
+  invoiceId     String?
+  notes         String?
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lines MillingCustomerOrderLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+}
+
+model MillingCustomerOrderLine {
+  id        String   @id @default(uuid())
+  orderId   String
+  /// A packed core Product (unit BAG).
+  productId String
+  bags      Int
+  unitPrice Decimal? @db.Decimal(12, 2)
+
+  order MillingCustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// A trip: a truck, a driver, a destination, and the bags loaded on it.
+model MillingDelivery {
+  id                 String    @id @default(uuid())
+  companyId          String
+  /// DN-YYMMDD-NN.
+  code               String
+  /// The core Equipment (category VEHICLE).
+  vehicleId          String
+  /// The core User who drives; they record proof of delivery on their phone.
+  driverId           String?
+  destinationId      String?
+  /// PLANNED, LOADING, DISPATCHED, DELIVERED (awaiting reconciliation) or CLOSED; or CANCELLED.
+  status             String    @default("PLANNED")
+  loadKg             Decimal   @default(0) @db.Decimal(12, 2)
+  odometerOut        Decimal?  @db.Decimal(10, 1)
+  odometerIn         Decimal?  @db.Decimal(10, 1)
+  fuelLitres         Decimal?  @db.Decimal(8, 2)
+  dispatchedAt       DateTime?
+  deliveredAt        DateTime?
+  closedAt           DateTime?
+  /// Proof of delivery: who received it, a signature or photo, and where.
+  receivedBy         String?
+  signatureUrl       String?
+  photoUrl           String?
+  latitude           Decimal?  @db.Decimal(9, 6)
+  longitude          Decimal?  @db.Decimal(9, 6)
+  notes              String?
+  createdById        String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  lines MillingDeliveryLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([driverId, status])
+}
+
+/// Bags of one lot on a delivery for one order line, and what became of them.
+model MillingDeliveryLine {
+  id              String   @id @default(uuid())
+  deliveryId      String
+  orderId         String
+  orderLineId     String
+  productId       String
+  lotId           String
+  stockLocationId String
+  reservationId   String?
+  bags            Int
+  deliveredBags   Int?
+  shortBags       Int      @default(0)
+  damagedBags     Int      @default(0)
+  returnedBags    Int      @default(0)
+  /// The lot returned bags went into, on hold for QC.
+  returnLotId     String?
+
+  delivery MillingDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@index([orderId])
+}
