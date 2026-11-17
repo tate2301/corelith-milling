@@ -27,6 +27,8 @@ export interface SettingsField {
   createOnly?: boolean;
   /** Left out of the table, kept in the form. */
   formOnly?: boolean;
+  /** Only shown for numeric quality checks. */
+  numericOnly?: boolean;
 }
 
 export type SettingsResourceKey =
@@ -100,15 +102,15 @@ export const SETTINGS_RESOURCES: readonly SettingsResource[] = [
     description: "What is checked on maize at intake and on product before release. A change to a check starts a new version; results keep the version they were judged against.",
     canCreate: true,
     fields: [
-      { key: "point", label: "Where", type: "select", required: true, options: QC_POINTS, createOnly: true },
+      { key: "point", label: "Check at", type: "select", required: true, options: QC_POINTS, createOnly: true },
       { key: "code", label: "Code", type: "text", required: true, createOnly: true },
       { key: "name", label: "Check", type: "text", required: true },
       { key: "method", label: "Method", type: "select", required: true, options: QC_METHODS },
-      { key: "resultType", label: "Result", type: "select", required: true, options: QC_RESULT_TYPES },
-      { key: "unit", label: "Unit", type: "text" },
-      { key: "minValue", label: "Lowest", type: "number" },
-      { key: "maxValue", label: "Highest", type: "number" },
-      { key: "guidance", label: "What a pass looks like", type: "text", formOnly: true },
+      { key: "resultType", label: "How to record the result", type: "select", required: true, options: QC_RESULT_TYPES },
+      { key: "unit", label: "Reading unit (for example %)", type: "text", numericOnly: true },
+      { key: "minValue", label: "Minimum passing reading", type: "number", numericOnly: true },
+      { key: "maxValue", label: "Maximum passing reading", type: "number", numericOnly: true },
+      { key: "guidance", label: "What a pass looks like", type: "text", formOnly: true, help: "Required for pass/fail checks. Tell the operator exactly what to look for." },
       yesNo("required", "Required", "Not performed blocks release until someone overrides it."),
       { key: "version", label: "Version", type: "number", readOnly: true },
       yesNo("isActive", "In use"),
@@ -118,9 +120,12 @@ export const SETTINGS_RESOURCES: readonly SettingsResource[] = [
     key: "locations",
     label: "Locations and bins",
     singular: "location",
-    description: "What each stock location at the mill is, and how much a bin holds. Locations are added under Stores.",
-    canCreate: false,
+    description: "Add a stock location or bin at a site, then set its type and capacity. Existing Stores locations also appear here.",
+    canCreate: true,
     fields: [
+      { key: "siteId", label: "Site", type: "select", required: true, createOnly: true, formOnly: true },
+      { key: "code", label: "Location code", type: "text", required: true, createOnly: true, formOnly: true },
+      { key: "name", label: "Location name", type: "text", required: true, createOnly: true, formOnly: true },
       { key: "location", label: "Location", type: "text", readOnly: true },
       { key: "kind", label: "Kind", type: "select", required: true, options: LOCATION_KINDS },
       { key: "capacityKg", label: "Holds", type: "number", unit: "kg", min: 0 },
@@ -130,7 +135,7 @@ export const SETTINGS_RESOURCES: readonly SettingsResource[] = [
     key: "vehicles",
     label: "Vehicles",
     singular: "vehicle",
-    description: "Delivery details for each vehicle. Vehicles are added under Maintenance as equipment in the Vehicle category.",
+    description: "Vehicles added in Maintenance with category Vehicle appear automatically. Set their delivery capacity and usual driver here.",
     canCreate: false,
     fields: [
       { key: "vehicle", label: "Vehicle", type: "text", readOnly: true },
@@ -170,13 +175,14 @@ export const SETTINGS_RESOURCES: readonly SettingsResource[] = [
     label: "Pack recipes",
     singular: "recipe",
     description: "How each packed product is made: bulk product per bag, the bag, and sewing thread.",
-    canCreate: false,
+    canCreate: true,
     fields: [
+      { key: "packedProductId", label: "Packed product (bags)", type: "select", required: true, createOnly: true, formOnly: true },
+      { key: "bulkProductId", label: "Bulk product (kilograms)", type: "select", required: true },
       { key: "packed", label: "Packed product", type: "text", readOnly: true },
-      { key: "bulk", label: "From", type: "text", readOnly: true },
       { key: "kgPerBag", label: "Bulk per bag", type: "number", unit: "kg", required: true, min: 0.001 },
       { key: "bagProductId", label: "Bag", type: "select" },
-      { key: "threadPerBag", label: "Thread per bag", type: "number", min: 0 },
+      { key: "threadPerBag", label: "Thread per bag", type: "number", min: 0, help: "In the THREAD product’s stock unit. Leave blank when not used." },
       yesNo("isActive", "In use"),
     ],
   },

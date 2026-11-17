@@ -14,7 +14,7 @@ export default function MillSettingsListPage() {
   return (
     <MillSettingsShell>
       {resource ? (
-        <SettingsResourceView resource={resource} />
+        <SettingsResourceView key={resource.key} resource={resource} />
       ) : (
         <EmptyState title="No such setting" body="Pick one of the tabs above." />
       )}
