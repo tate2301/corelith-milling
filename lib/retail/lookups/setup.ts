@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canSeeRetailCostPrice } from "@/lib/retail/permission-matrix";
 import { AccountAddRefused, accountOption, addPostingAccount, postableAccounts } from "@/lib/retail/posting-settings";
 import { TYPE_WORDS } from "@/lib/retail/posting-words";
+import { createPriceList, PriceListRefusal } from "@/lib/retail/price-lists/service";
 import { PriceListCopyRefusal, copyPriceList } from "@/lib/retail/price-list-copy";
 import { suggestSiteCode } from "@/lib/retail/site-words";
 import { SiteRefusal, createSite, priceListOptions, siteInput } from "@/lib/retail/sites";
@@ -13,7 +14,7 @@ import { LookupFieldErrors, type LookupCtx, type LookupNoun } from "./types";
 /**
  * Setup's nouns (10-setup 4.2, C-28): `site`, with its inline add (Name and
  * Address, the rest at their defaults), and `price-list`, whose inline add
- * copies another list.
+ * copies another list, or creates the first empty default.
  */
 
 const actorOf = (ctx: LookupCtx) => ({
@@ -106,8 +107,8 @@ const site: LookupNoun = {
 /**
  * Price lists, the default first: "Default, 214 products", "96 products";
  * binned ones are not offered. `context.withCost` (New price list's "Start
- * from") adds "Cost" last. The inline add copies another list ("Start from";
- * empty is the default).
+ * from") adds "Cost" and "Empty list". The inline add copies another list
+ * ("Start from"; empty is the default). With no lists, an empty source creates the first default.
  */
 const priceList: LookupNoun = {
   noun: "price-list",
@@ -119,7 +120,7 @@ const priceList: LookupNoun = {
   create: ["retail.prices", "create"],
   quick: [
     { key: "name", label: "Name", placeholder: "" },
-    { key: "from", label: "Start from", placeholder: "The default list" },
+    { key: "from", label: "Start from", placeholder: "Optional for first list" },
   ],
   async search(ctx, q, context) {
     const needle = q.toLowerCase();
@@ -133,15 +134,27 @@ const priceList: LookupNoun = {
         label: option.name,
         sub: context.for === "customer" ? (option.id === defaultId ? "Default" : null) : option.sub,
       }));
-    if (context.withCost === true) found.push({ id: "cost", label: "Cost", sub: "What each product costs" });
+    if (context.withCost === true) {
+      const empty = { id: "empty", label: "Empty list", sub: "Set prices for each product" };
+      if (options.length === 0) found.push(empty);
+      found.push({ id: "cost", label: "Cost", sub: "What each product costs" });
+      if (options.length > 0) found.push(empty);
+    }
     return found.filter((option) => !needle || option.label.toLowerCase().includes(needle));
   },
   async add(ctx, fields) {
     const { options, defaultId } = await priceListOptions(ctx.companyId);
     const typed = (fields.from ?? "").trim().toLowerCase();
     const from = typed ? options.find((option) => option.name.toLowerCase() === typed)?.id : defaultId;
-    if (!from) throw new LookupFieldErrors({ from: "Start from one of your price lists." });
+    if (!from && (typed || options.length > 0)) throw new LookupFieldErrors({ from: "Start from one of your price lists." });
     try {
+      if (!from) {
+        const { data } = await createPriceList(actorOf(ctx), {
+          name: fields.name ?? "", startFrom: { empty: true }, prices: "SAME",
+          audience: "EVERYONE", when: "ALWAYS", siteId: null, categoryIds: [], switchOn: true,
+        });
+        return { id: data.id, label: data.name, sub: data.isDefault ? "Default, 0 products" : "0 products" };
+      }
       const created = await copyPriceList(actorOf(ctx), { name: fields.name ?? "", fromId: from });
       return {
         id: created.id,
@@ -149,6 +162,7 @@ const priceList: LookupNoun = {
         sub: `${created.products} ${created.products === 1 ? "product" : "products"}`,
       };
     } catch (error) {
+      if (error instanceof PriceListRefusal) throw new LookupFieldErrors(error.fieldErrors);
       if (error instanceof PriceListCopyRefusal) throw new LookupFieldErrors({ [error.field]: error.message });
       throw error;
     }
