@@ -6,7 +6,7 @@ import type { FeatureRouteEntry } from "@/lib/platform/gating/types";
 import type { ReportDefinition, ReportLoader } from "@/lib/reports/types";
 import type { VerticalProductBundleDefinition, VerticalProductId } from "@/lib/workspace-products";
 
-import type { CorelithExtension } from "./types";
+import type { CorelithExtension, ExtensionNavAddition, ExtensionNavNode, ExtensionNavTarget } from "./types";
 
 /**
  * Merges registered extensions into core's catalogues, and refuses any
@@ -168,10 +168,26 @@ export function mergeTemplates(
   return merged;
 }
 
-/** The sidebar group an extension owns. */
-export function extensionGroupId(extension: Pick<CorelithExtension, "id">): NavGroupId {
-  return `ext.${extension.id}`;
+/** The sidebar group an extension owns, or one of its further groups by key. */
+export function extensionGroupId(extension: Pick<CorelithExtension, "id">, key?: string): NavGroupId {
+  return key ? `ext.${extension.id}.${key}` : `ext.${extension.id}`;
 }
+
+const GROUP_KEY = /^[a-z][a-z0-9-]{0,30}$/;
+
+/** The core groups an extension may add rows to (`ExtensionNavTarget`); checked at load, as types do not survive to a fork's JSON. */
+const NAV_TARGETS: ReadonlySet<string> = new Set<ExtensionNavTarget>([
+  "tender",
+  "crm",
+  "campus",
+  "huchu",
+  "records",
+  "stock",
+  "assets",
+  "books",
+  "people",
+  "insights",
+]);
 
 function insideRoot(extension: CorelithExtension, href: string): boolean {
   const path = href.split("?")[0] ?? href;
@@ -192,35 +208,114 @@ function checkNavKid(extension: CorelithExtension, kid: NavKid, ids: Set<string>
   }
 }
 
+function checkNavNode(extension: CorelithExtension, node: ExtensionNavNode, ids: Set<string>): void {
+  checkNavKid(extension, node, ids);
+  for (const kid of node.kids ?? []) checkNavKid(extension, kid, ids);
+}
+
+/** Strips what only the registry reads, so a merged row is a plain `NavNode`. */
+function navNode(node: ExtensionNavNode, group: NavGroupId): NavNode {
+  const row: NavNode & Partial<Pick<ExtensionNavAddition, "into" | "under">> = { ...node, group };
+  delete row.into;
+  delete row.under;
+  return row;
+}
+
+/**
+ * Core's rows, then each extension's: its own group, its further groups, and
+ * the rows it adds to core's groups (after core's rows, or as a child of the
+ * core row it names). A core row is never changed except to gain a child.
+ */
 export function mergeNavNodes(core: readonly NavNode[], extensions: readonly CorelithExtension[]): NavNode[] {
   const merged = [...core];
+  const coreIds = new Set(core.map((node) => node.id));
   const ids = new Set(core.flatMap((node) => [node.id, ...(node.kids ?? []).map((kid) => kid.id)]));
   for (const extension of extensions) {
-    for (const node of extension.nav?.nodes ?? []) {
-      checkNavKid(extension, node, ids);
-      for (const kid of node.kids ?? []) checkNavKid(extension, kid, ids);
-      merged.push({ ...node, group: extensionGroupId(extension) });
+    const nav = extension.nav;
+    if (!nav) continue;
+    for (const node of nav.nodes) {
+      checkNavNode(extension, node, ids);
+      merged.push(navNode(node, extensionGroupId(extension)));
+    }
+    const keys = new Set<string>();
+    for (const group of nav.groups ?? []) {
+      if (!GROUP_KEY.test(group.key)) {
+        throw new ExtensionError(extension.id, `nav group "${group.key}" must be lower-case letters, digits or "-"`);
+      }
+      if (keys.has(group.key)) throw new ExtensionError(extension.id, `nav group "${group.key}" is declared twice`);
+      keys.add(group.key);
+      for (const node of group.nodes) {
+        checkNavNode(extension, node, ids);
+        merged.push(navNode(node, extensionGroupId(extension, group.key)));
+      }
+    }
+    for (const addition of nav.additions ?? []) {
+      if (!NAV_TARGETS.has(addition.into)) {
+        throw new ExtensionError(extension.id, `nav row "${addition.id}" cannot join "${addition.into}"`);
+      }
+      checkNavNode(extension, addition, ids);
+      if (addition.under === undefined) {
+        merged.push(navNode(addition, addition.into));
+        continue;
+      }
+      const at = merged.findIndex(
+        (node) => node.id === addition.under && node.group === addition.into && coreIds.has(node.id),
+      );
+      if (at < 0) {
+        throw new ExtensionError(extension.id, `nav row "${addition.id}" sits under "${addition.under}", which is not a core row in "${addition.into}"`);
+      }
+      if (addition.kids?.length) {
+        throw new ExtensionError(extension.id, `nav row "${addition.id}" sits under a core row, so it cannot have children`);
+      }
+      const parent = merged[at]!;
+      const { id, label, icon, href, badge, live } = addition;
+      merged[at] = { ...parent, kids: [...(parent.kids ?? []), { id, label, icon, href, badge, live }] };
     }
   }
   return merged;
 }
 
-/** Each extension that has a sidebar group: its id, heading and the address prefix it runs under. */
-export function extensionNavGroups(
-  extensions: readonly CorelithExtension[],
-): Array<{ id: NavGroupId; label: string; prefix: string }> {
-  return extensions
-    .filter((extension) => extension.nav)
-    .map((extension) => ({ id: extensionGroupId(extension), label: extension.nav!.label, prefix: `/${extension.id}` }));
+function pathsOf(nodes: readonly ExtensionNavNode[]): string[] {
+  return [...new Set(nodes.flatMap((node) => [node, ...(node.kids ?? [])]).flatMap((kid) => [kid.href, ...(kid.live ?? [])]).map((href) => href.split("?")[0] ?? href))];
 }
 
-/** Every address an extension's sidebar can show, children and `live` alternatives included. */
-export function extensionNavAddresses(extensions: readonly CorelithExtension[]): string[] {
+/**
+ * Every group an extension owns, in order: its id, heading and the addresses
+ * that mean a workspace runs it. The extension's own group runs on anything
+ * under `/<id>`; a further group runs on its own rows' addresses.
+ */
+export function extensionNavGroups(
+  extensions: readonly CorelithExtension[],
+): Array<{ id: NavGroupId; label: string; prefixes: string[] }> {
+  return extensions.flatMap((extension) => {
+    const nav = extension.nav;
+    if (!nav) return [];
+    return [
+      { id: extensionGroupId(extension), label: nav.label, prefixes: [`/${extension.id}`] },
+      ...(nav.groups ?? []).map((group) => ({
+        id: extensionGroupId(extension, group.key),
+        label: group.label,
+        prefixes: pathsOf(group.nodes),
+      })),
+    ];
+  });
+}
+
+/** The addresses an extension adds to each core group: a product group (the floor, the mine) runs when one of them opens. */
+export function extensionNavAdditionPrefixes(extensions: readonly CorelithExtension[]): Array<[NavGroupId, string[]]> {
   return extensions.flatMap((extension) =>
-    (extension.nav?.nodes ?? []).flatMap((node) =>
-      [node, ...(node.kids ?? [])].flatMap((kid) => [kid.href, ...(kid.live ?? [])]),
-    ),
+    (extension.nav?.additions ?? []).map((addition): [NavGroupId, string[]] => [addition.into, pathsOf([addition])]),
   );
+}
+
+/** Every address an extension's sidebar can show, children, further groups, additions and `live` alternatives included. */
+export function extensionNavAddresses(extensions: readonly CorelithExtension[]): string[] {
+  return extensions.flatMap((extension) => {
+    const nav = extension.nav;
+    if (!nav) return [];
+    const nodes = [...nav.nodes, ...(nav.groups ?? []).flatMap((group) => group.nodes), ...(nav.additions ?? [])];
+    return nodes.flatMap((node) => [node, ...(node.kids ?? [])].flatMap((kid) => [kid.href, ...(kid.live ?? [])]));
+  });
 }
 
 /** The product bundle an extension owns. */

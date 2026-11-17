@@ -18,7 +18,7 @@ import { extensionNavGroups, mergeNavNodes } from "@/lib/extensions/registry";
 export type NavIconName = string;
 
 /** A product's own group, or one of the shared groups every workspace has. */
-type CoreNavGroupId =
+export type CoreNavGroupId =
   | "top"
   | "tender"
   | "crm"
@@ -32,7 +32,7 @@ type CoreNavGroupId =
   | "insights"
   | "saved";
 
-/** Core's groups, and `ext.<id>` for each registered extension's own group (`lib/extensions`). */
+/** Core's groups, and `ext.<id>` (or `ext.<id>.<key>`) for each group a registered extension owns (`lib/extensions`). */
 export type NavGroupId = CoreNavGroupId | `ext.${string}`;
 
 export type NavKid = {

@@ -1,6 +1,6 @@
 import { registeredExtensions } from "@/extensions";
 import { isRouteAllowedForRole } from "@/lib/auth-core/role-routes";
-import { extensionNavAddresses, extensionNavGroups } from "@/lib/extensions/registry";
+import { extensionNavAdditionPrefixes, extensionNavAddresses, extensionNavGroups } from "@/lib/extensions/registry";
 import { canAccessRouteWithToken } from "@/lib/platform/gating/enforcer";
 import { resolveFeatureKeyForPath } from "@/lib/platform/gating/route-registry";
 import { getWorkspaceOptions, getWorkspaceSidebarModel } from "@/lib/workspaces";
@@ -69,12 +69,25 @@ export function canOpenFor(who: Who): (href: string) => boolean {
   return (href) => open.has(href) || paths.has(pathOf(href));
 }
 
-const PRODUCT_PREFIXES: Array<[NavGroupId, string[]]> = [
+const CORE_PRODUCT_PREFIXES: Array<[NavGroupId, string[]]> = [
   ["tender", ["/retail"]],
   ["crm", ["/crm"]],
   ["campus", ["/schools"]],
   ["huchu", ["/gold", "/maintenance"]],
-  ...extensionNavGroups(registeredExtensions).map(({ id, prefix }): [NavGroupId, string[]] => [id, [prefix]]),
+];
+
+/** Each product group and the addresses that mean a workspace runs it; a row an extension adds to a core product group counts for it. */
+const PRODUCT_PREFIXES: Array<[NavGroupId, string[]]> = [
+  ...CORE_PRODUCT_PREFIXES.map(([id, prefixes]): [NavGroupId, string[]] => [
+    id,
+    [
+      ...prefixes,
+      ...extensionNavAdditionPrefixes(registeredExtensions)
+        .filter(([group]) => group === id)
+        .flatMap(([, paths]) => paths),
+    ],
+  ]),
+  ...extensionNavGroups(registeredExtensions).map(({ id, prefixes }): [NavGroupId, string[]] => [id, prefixes]),
 ];
 
 /**

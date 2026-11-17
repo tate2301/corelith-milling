@@ -97,7 +97,7 @@ load, so gating and provisioning treat it like a core vertical:
 | `bundleDependencies` | `BUNDLE_DEPENDENCIES` | own bundles only |
 | `routes.pages` / `routes.apis` | the route → feature registry | under `/<flavour>` / `/api/<flavour>/`, gated on own features |
 | `templates` | `CLIENT_BUNDLE_TEMPLATES` (provisioning) | code `TEMPLATE_<FLAVOUR>` or `TEMPLATE_<FLAVOUR>_…` |
-| `nav` | its own sidebar group `ext.<flavour>`, first among the tenant's products (`NAV_NODES`, `PRODUCT_GROUPS`, `GROUP_LABEL`) | row ids `<flavour>.<name>`, every address under `/<flavour>` |
+| `nav` | its own sidebar group `ext.<flavour>`, first among the tenant's products; further groups of its own (`nav.groups`, `ext.<flavour>.<key>`); rows added to a core group after core's own, or as a child of a core row (`nav.additions`, `into` and `under`) | row ids `<flavour>.<name>`, every address under `/<flavour>`; core's rows are never changed or hidden, and `top` and `saved` take no additions |
 | `product` | `VERTICAL_PRODUCT_BUNDLES` as `ext.<flavour>`; a GENERAL workspace holding any `<flavour>.` feature runs it (label above the sidebar, home) | home under `/<flavour>` |
 | `reports` | `REPORT_DEFINITIONS`, readable only with their feature | key `<flavour>-<name>`, `featureKey` its own, page under `/<flavour>` |
 | loaders in `extensions/server.ts` | the report loaders (server-only, may query) | same key as a report it declares; never a core key |

@@ -123,6 +123,45 @@ describe("an extension's sidebar group", () => {
   });
 });
 
+describe("an extension's further groups and the rows it adds to core's", () => {
+  const provisioned = getClientTemplateFeatureKeys("TEMPLATE_FIXTURE");
+  const manager = { role: "MANAGER", enabledFeatures: provisioned, workspaceProfile: "GENERAL" };
+  const compose = (who: typeof manager) =>
+    composeNav({ canOpen: canOpenFor(who), products: productGroupsFor(visibleAddresses(who), "GENERAL") });
+
+  it("draws its further group after its own, with its heading", () => {
+    expect(PRODUCT_GROUPS).toContain("ext.fixture.gate");
+    expect(GROUP_LABEL["ext.fixture.gate"]).toBe("Fixture gate");
+    const ids = compose(manager).map((group) => group.id).filter((id) => id !== "top");
+    expect(ids[0]).toBe("ext.fixture");
+    expect(ids.indexOf("ext.fixture.gate")).toBeGreaterThan(ids.indexOf("ext.fixture"));
+    expect(compose(manager).find((group) => group.id === "ext.fixture.gate")?.items.map((item) => item.href)).toEqual([
+      "/fixture/gate/till",
+    ]);
+  });
+
+  it("adds rows to a core group after core's own, and a child under a core row", () => {
+    const stock = NAV_NODES.filter((node) => node.group === "stock");
+    expect(stock.at(-1)?.id).toBe("fixture.fuel");
+    expect(stock.find((node) => node.id === "buying")?.kids?.at(-1)?.id).toBe("fixture.goods-in");
+    const drawn = compose(manager).find((group) => group.id === "stock");
+    expect(drawn?.items.map((item) => item.id)).toContain("fixture.fuel");
+    expect(visibleAddresses(manager).has("/fixture/stock/goods-in")).toBe(true);
+  });
+
+  it("runs a core product group on the strength of a row it adds there", () => {
+    const groups = compose(manager);
+    expect(groups.find((group) => group.id === "crm")?.items.map((item) => item.href)).toContain("/fixture/customers/routes");
+  });
+
+  it("hides every one of them without the extension's features", () => {
+    const none = { ...manager, enabledFeatures: provisioned.filter((key) => !key.startsWith("fixture.")) };
+    const hrefs = compose(none).flatMap((group) => group.items.flatMap((item) => [item.href, ...item.kids.map((kid) => kid.href)]));
+    expect(hrefs.filter((href) => href.startsWith("/fixture"))).toEqual([]);
+    expect(compose(none).some((group) => group.id === "ext.fixture.gate")).toBe(false);
+  });
+});
+
 describe("an extension's product, reports and roles", () => {
   const provisioned = getClientTemplateFeatureKeys("TEMPLATE_FIXTURE");
   const without = provisioned.filter((key) => !key.startsWith("fixture."));
