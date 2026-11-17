@@ -1,3 +1,4 @@
+import { AGE_BAND_KEYS, AGE_BAND_LABELS, ageBand } from "@/lib/ageing";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { docLabel } from "@/lib/books/doc-number";
 import { z } from "zod";
@@ -281,16 +282,18 @@ export async function invoicesCsv(db: Db, companyId: string, query: InvoiceQuery
   return `${lines.join("\n")}\n`;
 }
 
-/** How late an open invoice is, in the buckets "Owed to you, by age" groups by. */
-export const AGE_BUCKETS = ["Not yet due", "1 to 30 days", "31 to 60 days", "61 to 90 days", "Over 90 days"] as const;
+/** How late an open invoice is, in the buckets "Owed to you, by age" groups by (`lib/ageing.ts`). */
+export const AGE_BUCKETS = AGE_BAND_KEYS.map((key) => AGE_BAND_LABELS[key]) as unknown as readonly [
+  "Not yet due",
+  "1 to 30 days",
+  "31 to 60 days",
+  "61 to 90 days",
+  "Over 90 days",
+];
 export type AgeBucket = (typeof AGE_BUCKETS)[number];
 
 export function ageBucket(daysOverdue: number): AgeBucket {
-  if (daysOverdue <= 0) return "Not yet due";
-  if (daysOverdue <= 30) return "1 to 30 days";
-  if (daysOverdue <= 60) return "31 to 60 days";
-  if (daysOverdue <= 90) return "61 to 90 days";
-  return "Over 90 days";
+  return AGE_BAND_LABELS[ageBand(daysOverdue)] as AgeBucket;
 }
 
 /** Every invoice with money still owing on it, with how late it is and its age bucket. */

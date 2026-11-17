@@ -111,7 +111,7 @@ export function AppShell({
 
 function ShellFrame({ children, builder }: { children: React.ReactNode; builder: BuilderSurface | null }) {
   const { width, drawerOpen, setDrawerOpen } = useShell();
-  const { pending, refused, groups, active, companyName, badges } = useShellNav();
+  const { pending, refused, groups, active, companyName, badges, phoneRows } = useShellNav();
   const { prefs } = useNavPrefs(companyName);
   const phoneBar =
     width === "phone" ? (
@@ -120,6 +120,7 @@ function ShellFrame({ children, builder }: { children: React.ReactNode; builder:
         active={active}
         prefs={prefs}
         badges={badges}
+        rows={phoneRows}
         moreOpen={drawerOpen}
         onMore={() => setDrawerOpen(!drawerOpen)}
       />

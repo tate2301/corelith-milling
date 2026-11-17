@@ -24,7 +24,7 @@
  * that is where a late payment stops being late and becomes a debt to chase.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { AGE_BAND_LABELS, ageBand, daysPastDue } from "@/lib/ageing";
 
 export type AgeingBucketKey = "current" | "days30" | "days60" | "days90" | "days90Plus";
 
@@ -40,39 +40,21 @@ export type AgeingBucket = {
   tone: AgeingTone;
 };
 
+/** The school's keys for the one ageing (`lib/ageing.ts`), with its words. */
 export const AGEING_BUCKETS: readonly AgeingBucket[] = [
-  { key: "current", label: "Current", from: null, to: 0, tone: "good" },
-  { key: "days30", label: "1–30 days", from: 1, to: 30, tone: "neutral" },
-  { key: "days60", label: "31–60 days", from: 31, to: 60, tone: "warn" },
-  { key: "days90", label: "61–90 days", from: 61, to: 90, tone: "warn" },
-  { key: "days90Plus", label: "90+ days", from: 91, to: null, tone: "danger" },
+  { key: "current", label: AGE_BAND_LABELS.current, from: null, to: 0, tone: "good" },
+  { key: "days30", label: AGE_BAND_LABELS.days30, from: 1, to: 30, tone: "neutral" },
+  { key: "days60", label: AGE_BAND_LABELS.days60, from: 31, to: 60, tone: "warn" },
+  { key: "days90", label: AGE_BAND_LABELS.days90, from: 61, to: 90, tone: "warn" },
+  { key: "days90Plus", label: AGE_BAND_LABELS.over90, from: 91, to: null, tone: "danger" },
 ];
 
-/**
- * Whole days a bill is past its due date: zero on the due date itself and
- * negative before it, so `ageingBucket` needs no second rule for "not yet due".
- *
- * A bill with no due date is not overdue. That is a billing mistake rather
- * than an arrear, and treating the missing date as ancient would put the
- * largest number the screen shows in its worst column.
- */
-export function daysPastDue(
-  dueDate: Date | string | null | undefined,
-  asOf: Date = new Date(),
-): number {
-  if (!dueDate) return 0;
-  const due = dueDate instanceof Date ? dueDate : new Date(dueDate);
-  if (Number.isNaN(due.getTime())) return 0;
-  return Math.floor((asOf.getTime() - due.getTime()) / DAY_MS);
-}
+export { daysPastDue };
 
 /** Which band a balance sits in, given whole days past its due date. */
 export function ageingBucket(daysOverdue: number): AgeingBucketKey {
-  if (!Number.isFinite(daysOverdue) || daysOverdue <= 0) return "current";
-  if (daysOverdue <= 30) return "days30";
-  if (daysOverdue <= 60) return "days60";
-  if (daysOverdue <= 90) return "days90";
-  return "days90Plus";
+  const band = ageBand(daysOverdue);
+  return band === "over90" ? "days90Plus" : band;
 }
 
 /**

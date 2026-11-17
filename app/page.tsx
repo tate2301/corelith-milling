@@ -8,6 +8,7 @@ import { seoPages } from "@/app/home/site-data";
 import { buildMarketingMetadata } from "@/lib/marketing/seo";
 import { PLATFORM_BRAND_NAME } from "@/lib/platform/brand";
 import { getHostHeaderFromRequestHeaders, getPlatformHostContext } from "@/lib/platform/tenant";
+import { readExtensionNav } from "@/lib/extensions/nav-server";
 import { getComputedWorkspaceHomeHref } from "@/lib/workspaces";
 
 export const metadata = {
@@ -29,13 +30,18 @@ export default async function RootPage() {
   const session = await getServerSession(authOptions);
 
   if (session?.user) {
-    redirect(
-      getComputedWorkspaceHomeHref({
-        role: session.user.role,
-        enabledFeatures: session.user.enabledFeatures,
-        workspaceProfile: session.user.workspaceProfile,
-      }),
+    const who = {
+      role: session.user.role,
+      enabledFeatures: session.user.enabledFeatures,
+      workspaceProfile: session.user.workspaceProfile,
+    };
+    // An extension may start a person on the page their part of the trade
+    // works from (the weighbridge clerk on intake); otherwise the workspace's home.
+    const { home } = await readExtensionNav(
+      { userId: session.user.id, companyId: session.user.companyId, role: session.user.role ?? null },
+      who,
     );
+    redirect(home ?? getComputedWorkspaceHomeHref(who));
   }
 
   // A signed-out visitor on a tenant workspace host wants to sign in, not read

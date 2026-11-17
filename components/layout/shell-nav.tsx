@@ -5,12 +5,13 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { registeredExtensions } from "@/extensions";
 import { fetchJson } from "@/lib/api-client";
 import type { NavItem } from "@/lib/navigation";
 import { isRouteAllowedForRole } from "@/lib/auth-core/role-routes";
 import { GearSix } from "@/lib/icons";
 import { logoInitials } from "@/lib/nav/initials";
-import { canOpenFor, lockedAddresses, productGroupsFor, visibleAddresses } from "@/lib/nav/gate";
+import { canOpenFor, lockedAddresses, navLayoutFor, visibleAddresses } from "@/lib/nav/gate";
 import { composeNav, type ComposedGroup } from "@/lib/nav/compose";
 import { activeNav, type ActiveNav } from "@/lib/nav/match";
 import {
@@ -44,6 +45,8 @@ export type ShopConditions = Partial<Record<RetailNavCondition, boolean>>;
 export const NAV_BADGES_KEY = ["nav-badges"] as const;
 /** Books' row figures (`GET /api/books/nav`), under the same key so a change refreshes both. */
 const BOOKS_BADGES_KEY = [...NAV_BADGES_KEY, "books"] as const;
+/** The registered extensions' row figures, start page and phone bar, under the same key so a change refreshes them. */
+const EXTENSION_NAV_KEY = [...NAV_BADGES_KEY, "extensions"] as const;
 
 const NO_BADGES: Record<string, string> = {};
 
@@ -107,6 +110,8 @@ export type ShellNav = {
   refusalNoun: string;
   /** Where this person's workspace starts, for the refusal's way out. */
   homeHref: string;
+  /** The rows an extension puts on this person's phone bar, by id, or null for the usual first four. */
+  phoneRows: string[] | null;
   badges: Record<string, string>;
   companyName: string;
   initials: string;
@@ -186,6 +191,17 @@ export function ShellNavProvider({
     refetchOnWindowFocus: true,
   });
 
+  // What registered extensions add: counts on their rows, this person's start
+  // page and phone bar (`/api/extensions/nav`). Nothing to ask without one.
+  const hasExtensions = registeredExtensions.length > 0;
+  const extensionQuery = useQuery({
+    queryKey: EXTENSION_NAV_KEY,
+    queryFn: () => fetchJson<{ badges: Record<string, string>; home: string | null; phone: string[] }>("/api/extensions/nav"),
+    enabled: hasExtensions && sessionStatus === "authenticated",
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+
   // Build's rows count what each holds, while Build is the page's module.
   const onBuild = pathname === "/build" || pathname.startsWith("/build/");
   const buildQuery = useQuery({
@@ -203,12 +219,22 @@ export function ShellNavProvider({
   const retailBadges = mounted ? badgesQuery.data?.badges : undefined;
   const booksBadges = mounted ? booksQuery.data?.badges : undefined;
   const buildBadges = mounted && onBuild ? buildQuery.data?.badges : undefined;
+  const extensionNav = mounted ? extensionQuery.data : undefined;
+  const extensionBadges = extensionNav?.badges;
   const badges = React.useMemo(
     () =>
-      retailBadges || booksBadges || buildBadges ? { ...retailBadges, ...booksBadges, ...buildBadges } : NO_BADGES,
-    [booksBadges, buildBadges, retailBadges],
+      retailBadges || booksBadges || buildBadges || extensionBadges
+        ? { ...retailBadges, ...booksBadges, ...buildBadges, ...extensionBadges }
+        : NO_BADGES,
+    [booksBadges, buildBadges, extensionBadges, retailBadges],
   );
 
+  // Management: the one sanctioned swap. Its rows keep the gates they had.
+  const managementGroups = React.useMemo(() => {
+    const allowed = canOpenFor(modelArgs);
+    const settings = new Set(getVisibleSettingsNavEntries(modelArgs).map((entry) => entry.id));
+    return composeManagement({ settings, canOpen: allowed });
+  }, [modelArgs]);
   // The sidebar: one tree for the whole platform, from what this person may
   // open. A retail page whose shop condition does not hold, or that waits on a
   // badge it has not got, is not offered, unless it is the page they are on.
@@ -220,22 +246,16 @@ export function ShellNavProvider({
     const locks = lockedAddresses(modelArgs);
     const allowed = (href: string) => may(href) && !locks.has(href.split("?")[0] ?? href);
     const unmet = hiddenRetailNavHrefs(conditions, badges);
-    const products = productGroupsFor(open, workspaceProfile);
-    const here = activeNav(composeNav({ canOpen: allowed, products }), pathname, searchParams);
+    const layout = navLayoutFor(open, workspaceProfile);
+    const here = activeNav(composeNav({ canOpen: allowed, ...layout }), pathname, searchParams);
     const composed = composeNav({
       canOpen: (href) => allowed(href) && (!unmet.has(href) || href === here?.href),
-      products,
+      ...layout,
     });
     return { groups: composed, active: notFound ? null : activeNav(composed, pathname, searchParams) };
   }, [badges, conditions, modelArgs, notFound, open, pathname, searchParams, workspaceProfile]);
   const activeHref = active?.href ?? null;
 
-  // Management: the one sanctioned swap. Its rows keep the gates they had.
-  const managementGroups = React.useMemo(() => {
-    const allowed = canOpenFor(modelArgs);
-    const settings = new Set(getVisibleSettingsNavEntries(modelArgs).map((entry) => entry.id));
-    return composeManagement({ settings, canOpen: allowed });
-  }, [modelArgs]);
   const inManagement = isManagementPath(pathname, searchParams);
   const [managementCounts, setCounts] = React.useState<Record<string, number>>({});
   const setManagementCounts = React.useCallback((counts: Record<string, number> | null) => {
@@ -270,13 +290,13 @@ export function ShellNavProvider({
     sessionStatus === "authenticated" && !canRoleOpenRetailPath(role, pathname, searchParams);
   const refusalNoun = pageItem ? RESOURCE_LABELS[pageItem.requires[0][0]] : "this page";
   React.useEffect(() => {
-    if (!hasRetail && !hasBooks) return;
+    if (!hasRetail && !hasBooks && !hasExtensions) return;
     return queryClient.getMutationCache().subscribe((event) => {
       if (event.type === "updated" && event.action.type === "success") {
         void queryClient.invalidateQueries({ queryKey: NAV_BADGES_KEY });
       }
     });
-  }, [hasBooks, hasRetail, queryClient]);
+  }, [hasBooks, hasExtensions, hasRetail, queryClient]);
 
   const companyName = brand?.name ?? front.workspaceLabel;
   const value = React.useMemo<ShellNav>(
@@ -300,13 +320,14 @@ export function ShellNavProvider({
       pending,
       refused,
       refusalNoun,
-      homeHref: front.homeHref,
+      homeHref: extensionNav?.home ?? front.homeHref,
+      phoneRows: extensionNav?.phone.length ? extensionNav.phone : null,
       badges,
       companyName,
       initials: logoInitials(brand?.legalName, companyName),
       logoUrl: brand?.logoUrl ?? null,
     }),
-    [active, activeHref, addHref, badges, managementCounts, setManagementCounts, brand, companyName, front, groups, inManagement, managementActive, managementGroups, pageItem, pending, refused, refusalNoun, role],
+    [active, activeHref, addHref, badges, extensionNav, managementCounts, setManagementCounts, brand, companyName, front, groups, inManagement, managementActive, managementGroups, pageItem, pending, refused, refusalNoun, role],
   );
 
   return <ShellNavContext.Provider value={value}>{children}</ShellNavContext.Provider>;

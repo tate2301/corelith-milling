@@ -1,5 +1,5 @@
 import type { ClientBundleTemplateDefinition } from "@/lib/platform/client-templates";
-import type { NavKid } from "@/lib/nav/registry";
+import type { CoreNavGroupId, NavGroupId, NavKid } from "@/lib/nav/registry";
 import type { ReportDefinition } from "@/lib/reports/types";
 import type { UserRole } from "@/lib/roles";
 import type { VerticalProductBundleDefinition } from "@/lib/workspace-products";
@@ -20,6 +20,7 @@ import type { FeatureBundleDefinition, FeatureCatalogEntry } from "@/lib/platfor
  *   page routes       `/<id>` and below
  *   API routes        `/api/<id>/` and below
  *   nav node ids      `<id>.<name>`, every address under `/<id>`
+ *   nav group ids     `ext.<id>` and `ext.<id>.<key>`
  *   report keys       `<id>-<name>`, gated on its own features
  *
  * `lib/extensions/registry.ts` checks these when the catalogues load, so a
@@ -42,10 +43,11 @@ export interface CorelithExtension {
   routes?: ExtensionRoutes;
   templates?: ClientBundleTemplateDefinition[];
   /**
-   * The extension's own sidebar group, shown first for a tenant that runs it.
-   * A row shows only to someone the proxy would let in: its address must be
-   * gated on one of the extension's features (`routes.pages`) and the person
-   * must hold that feature and be allowed the route by their role.
+   * The extension's sidebar: its own group, shown first for a tenant that
+   * runs it, any further groups of its own, and rows it adds to core's
+   * groups. A row shows only to someone the proxy would let in: its address
+   * must be gated on one of the extension's features (`routes.pages`) and the
+   * person must hold that feature and be allowed the route by their role.
    */
   nav?: ExtensionNav;
   /**
@@ -74,10 +76,62 @@ export interface ExtensionDefaults {
 export type ExtensionProduct = Omit<VerticalProductBundleDefinition, "id" | "templateCodes">;
 
 export interface ExtensionNav {
-  /** The group's heading, e.g. "The mill". */
+  /** The heading of the extension's own group (`ext.<id>`), e.g. "The mill". */
+  label: string;
+  nodes: ExtensionNavNode[];
+  /**
+   * Further groups the extension owns, after its own, in this order. Each is
+   * `ext.<id>.<key>`, e.g. `{ key: "gate", label: "Gate sales" }` is
+   * `ext.milling.gate`. Their rows follow the same rules as `nodes`.
+   */
+  groups?: ExtensionNavGroup[];
+  /**
+   * Rows added to a group core already draws, after core's own rows, so a
+   * vertical's pages sit where a person looks for them (fuel issues under
+   * Stock, meter readings under Assets). Core's rows are never changed or
+   * hidden; the added row's id and address are still the extension's own.
+   */
+  additions?: ExtensionNavAddition[];
+  /**
+   * While the workspace runs this extension's product: the order its groups
+   * are drawn in, core's and the extension's own mixed (`["ext.milling",
+   * "stock", "ext.milling.gate", "crm", "books"]`). Groups left out keep
+   * core's order after these. The top rows stay first.
+   */
+  order?: NavGroupId[];
+  /**
+   * While the workspace runs this extension's product: the trade's own words
+   * for core's groups and rows, by id (`{ groups: { stock: "Stores" },
+   * rows: { workorders: "Work orders" } }`). Only the words change; what a
+   * row opens and who may open it do not.
+   */
+  labels?: ExtensionNavLabels;
+}
+
+export interface ExtensionNavLabels {
+  groups?: Partial<Record<NavGroupId, string>>;
+  rows?: Record<string, string>;
+}
+
+export interface ExtensionNavGroup {
+  /** Lower-case letters, digits and "-"; the group's id is `ext.<id>.<key>`. */
+  key: string;
   label: string;
   nodes: ExtensionNavNode[];
 }
+
+/** Core groups an extension may add rows to: every group but the top rows and the person's pins. */
+export type ExtensionNavTarget = Exclude<CoreNavGroupId, "top" | "saved">;
+
+export type ExtensionNavAddition = ExtensionNavNode & {
+  /** The core group the row joins. */
+  into: ExtensionNavTarget;
+  /**
+   * A core row in that group to sit under as a child, by id (Stock's
+   * "buying"). The row then has no children of its own.
+   */
+  under?: string;
+};
 
 /** A sidebar row and its children; icons are names from `NAV_ICONS`. */
 export type ExtensionNavNode = NavKid & { kids?: NavKid[] };

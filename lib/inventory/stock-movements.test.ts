@@ -24,7 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { quantity, type MoneyLike } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 
-import { recordStockMovement, type RecordStockMovementInput } from "./stock-movements";
+import { movingAverageCost, recordStockMovement, type RecordStockMovementInput } from "./stock-movements";
 
 let companyId: string;
 let otherCompanyId: string;
@@ -165,6 +165,7 @@ afterAll(async () => {
   await prisma.stockMovement.deleteMany({ where: { reversesId: { not: null }, item: { site: { companyId: companies } } } });
   await prisma.stockMovement.deleteMany({ where: { item: { site: { companyId: companies } } } });
   await prisma.inventoryItem.deleteMany({ where: { site: { companyId: companies } } });
+  await prisma.equipment.deleteMany({ where: { site: { companyId: companies } } });
   await prisma.stockLocation.deleteMany({ where: { site: { companyId: companies } } });
   await prisma.site.deleteMany({ where: { companyId: companies } });
   await prisma.user.deleteMany({ where: { companyId: companies } });
@@ -430,5 +431,85 @@ describe("recordStockMovement", () => {
         reversesId: movement.id,
       }),
     ).rejects.toThrow("A reversal puts back a movement on the same stock line.");
+  });
+});
+
+describe("moving-average cost", () => {
+  it("averages a receipt at a cost with what is on hand", async () => {
+    const id = await freshItem(10); // 10 at 0.80
+    await move(id, { movementType: "RECEIPT", quantity: 30, unitCost: 1.2, sourceType: "STOCK_RECEIPT", reason: null, reference: null });
+    const item = await prisma.inventoryItem.findUniqueOrThrow({ where: { id }, select: { unitCost: true } });
+    // (10 × 0.80 + 30 × 1.20) / 40 = 1.10
+    expect(item.unitCost?.toFixed(2)).toBe("1.10");
+  });
+
+  it("takes the receipt's cost when nothing is on hand or the line has no cost", () => {
+    const d = (value: number) => quantity(value);
+    expect(movingAverageCost({ onHand: d(0), unitCost: d(5) }, d(4), d(2)).toFixed(2)).toBe("2.00");
+    expect(movingAverageCost({ onHand: d(8), unitCost: null }, d(4), d(2)).toFixed(2)).toBe("2.00");
+    expect(movingAverageCost({ onHand: d(-3), unitCost: d(5) }, d(4), d(2)).toFixed(2)).toBe("2.00");
+  });
+});
+
+describe("an issue into equipment", () => {
+  async function generator(meterType: "HOURS" | "NONE", currentMeter: number | null = null) {
+    lines += 1;
+    return prisma.equipment.create({
+      data: {
+        siteId,
+        locationId: storeroomId,
+        equipmentCode: `GEN-${stamp}-${lines}`,
+        name: "Generator",
+        category: "GENERATOR",
+        meterType,
+        currentMeter,
+        meterReadAt: currentMeter === null ? null : new Date(Date.now() - 86_400_000),
+      },
+      select: { id: true },
+    });
+  }
+
+  it("keeps the issue against the equipment and records its meter", async () => {
+    const id = await freshItem(200);
+    const gen = await generator("HOURS", 1200);
+    const { movement } = await move(id, {
+      quantity: 40,
+      equipmentId: gen.id,
+      meterReading: 1212.5,
+      sourceType: "STOCK_ISSUE",
+      reason: null,
+      reference: null,
+    });
+    expect(movement.equipmentId).toBe(gen.id);
+    expect(qty(movement.meterReading)).toBe(qty(1212.5));
+    const after = await prisma.equipment.findUniqueOrThrow({ where: { id: gen.id }, select: { currentMeter: true } });
+    expect(qty(after.currentMeter)).toBe(qty(1212.5));
+    const readings = await prisma.meterReading.findMany({ where: { equipmentId: gen.id } });
+    expect(readings.map((row) => [row.source, row.sourceId])).toEqual([["FUEL_ISSUE", movement.id]]);
+  });
+
+  it("refuses a meter that goes back, and moves no stock", async () => {
+    const id = await freshItem(200);
+    const gen = await generator("HOURS", 1200);
+    await expect(
+      move(id, { quantity: 40, equipmentId: gen.id, meterReading: 1100, sourceType: "STOCK_ISSUE", reason: null, reference: null }),
+    ).rejects.toThrow(/cannot go back/);
+    expect(qty((await onHand(id)).currentStock)).toBe(qty(200));
+  });
+
+  it("refuses equipment of another company, a receipt into equipment, and a reading without equipment", async () => {
+    const id = await freshItem(200);
+    const gen = await generator("NONE");
+    const rivalSite = await prisma.site.create({ data: { companyId: otherCompanyId, name: "Rival", code: `RV-${stamp}` } });
+    const rivalLocation = await prisma.stockLocation.create({ data: { siteId: rivalSite.id, name: "Yard", code: `RVY-${stamp}` } });
+    const rival = await prisma.equipment.create({
+      data: { siteId: rivalSite.id, locationId: rivalLocation.id, equipmentCode: `RV-${stamp}`, name: "Truck", category: "VEHICLE" },
+    });
+    const issue = { quantity: 1, sourceType: "STOCK_ISSUE" as const, reason: null, reference: null };
+    await expect(move(id, { ...issue, equipmentId: rival.id })).rejects.toThrow("Invalid equipment.");
+    await expect(move(id, { ...issue, movementType: "RECEIPT", equipmentId: gen.id })).rejects.toThrow(/Only an issue/);
+    await expect(move(id, { ...issue, meterReading: 10 })).rejects.toThrow(/needs the equipment/);
+    await expect(move(id, { ...issue, equipmentId: gen.id, meterReading: 10 })).rejects.toThrow(/no meter/);
+    expect(qty((await onHand(id)).currentStock)).toBe(qty(200));
   });
 });

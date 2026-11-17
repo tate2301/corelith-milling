@@ -572,6 +572,15 @@ export async function createRetailSaleTransaction(input: {
             needs: input.caseBreaks,
           });
         }
+        // Each line keeps its product's net weight as sold (a 10 kg bag), so a
+        // day's takings read in tonnes even after the product's weight changes.
+        const weighed = [...new Set(input.lines.flatMap((line) => (line.productId ? [line.productId] : [])))];
+        const weightByProduct = new Map(
+          (weighed.length
+            ? await tx.product.findMany({ where: { id: { in: weighed } }, select: { id: true, netWeightKg: true } })
+            : []
+          ).map((product) => [product.id, product.netWeightKg]),
+        );
         const saleId = randomUUID();
         const created = await tx.retailSale.create({
           data: {
@@ -624,6 +633,7 @@ export async function createRetailSaleTransaction(input: {
                 productId: line.productId ?? null,
                 priceListId: line.priceListId ?? null,
                 itemName: line.itemName,
+                netWeightKg: line.productId ? (weightByProduct.get(line.productId) ?? null) : null,
                 quantity: line.quantity,
                 unitPrice: line.unitPrice,
                 discountAmount: line.discountAmount,

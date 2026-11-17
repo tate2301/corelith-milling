@@ -271,7 +271,8 @@ export async function openCases(
       movementType: "RECEIPT",
       quantity: quantity(singles),
       unit: singleLine.unit,
-      ...(singleCost ? { unitCost: singleCost } : {}),
+      // Already the blended figure (`blendedCost`): set it, do not average it again.
+      ...(singleCost ? { unitCost: singleCost, unitCostIsAverage: true } : {}),
       notes,
       sourceType: "RETAIL_STOCK_ADJUSTMENT",
       sourceId,

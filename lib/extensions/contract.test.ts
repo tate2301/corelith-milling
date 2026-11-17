@@ -15,6 +15,9 @@ vi.mock("@/extensions", async () => ({
 vi.mock("@/extensions/server", async () => ({
   registeredExtensionLoaders: (await import("@/extensions/__fixture__/server")).FIXTURE_LOADERS,
 }));
+vi.mock("@/extensions/nav-server", async () => ({
+  registeredExtensionNav: [(await import("@/extensions/__fixture__/server")).FIXTURE_NAV],
+}));
 
 import { getBundleDefinition, BUNDLE_DEPENDENCIES, FEATURE_BUNDLES, FEATURE_CATALOG } from "@/lib/platform/feature-catalog";
 import {
@@ -26,7 +29,8 @@ import { isKnownFeatureKey } from "@/lib/platform/gating/catalog-utils";
 import { getFeatureDependencies } from "@/lib/platform/gating/feature-dependencies";
 import { getAllRouteFeatureKeys, resolveFeatureKeyForPath } from "@/lib/platform/gating/route-registry";
 import { composeNav } from "@/lib/nav/compose";
-import { canOpenFor, productGroupsFor, visibleAddresses } from "@/lib/nav/gate";
+import { canOpenFor, navLayoutFor, productGroupsFor, visibleAddresses } from "@/lib/nav/gate";
+import { readExtensionNav } from "@/lib/extensions/nav-server";
 import { GROUP_LABEL, NAV_NODES, PRODUCT_GROUPS } from "@/lib/nav/registry";
 import { isEquipmentCategoryAllowed } from "@/lib/maintenance/equipment-categories";
 import { resolveVerticalDefaults } from "@/lib/platform/vertical-defaults";
@@ -120,6 +124,109 @@ describe("an extension's sidebar group", () => {
   it("hides rows the role may not reach, as the proxy refuses them", () => {
     const rep = { ...manager, role: "SALES_REP" };
     expect(visibleAddresses(rep).has("/fixture")).toBe(false);
+  });
+});
+
+describe("an extension's further groups and the rows it adds to core's", () => {
+  const provisioned = getClientTemplateFeatureKeys("TEMPLATE_FIXTURE");
+  const manager = { role: "MANAGER", enabledFeatures: provisioned, workspaceProfile: "GENERAL" };
+  const compose = (who: typeof manager) =>
+    composeNav({ canOpen: canOpenFor(who), products: productGroupsFor(visibleAddresses(who), "GENERAL") });
+
+  it("draws its further group after its own, with its heading", () => {
+    expect(PRODUCT_GROUPS).toContain("ext.fixture.gate");
+    expect(GROUP_LABEL["ext.fixture.gate"]).toBe("Fixture gate");
+    const ids = compose(manager).map((group) => group.id).filter((id) => id !== "top");
+    expect(ids[0]).toBe("ext.fixture");
+    expect(ids.indexOf("ext.fixture.gate")).toBeGreaterThan(ids.indexOf("ext.fixture"));
+    expect(compose(manager).find((group) => group.id === "ext.fixture.gate")?.items.map((item) => item.href)).toEqual([
+      "/fixture/gate/till",
+    ]);
+  });
+
+  it("adds rows to a core group after core's own, and a child under a core row", () => {
+    const stock = NAV_NODES.filter((node) => node.group === "stock");
+    expect(stock.at(-1)?.id).toBe("fixture.fuel");
+    expect(stock.find((node) => node.id === "buying")?.kids?.at(-1)?.id).toBe("fixture.goods-in");
+    const drawn = compose(manager).find((group) => group.id === "stock");
+    expect(drawn?.items.map((item) => item.id)).toContain("fixture.fuel");
+    expect(visibleAddresses(manager).has("/fixture/stock/goods-in")).toBe(true);
+  });
+
+  it("runs a core product group on the strength of a row it adds there", () => {
+    const groups = compose(manager);
+    expect(groups.find((group) => group.id === "crm")?.items.map((item) => item.href)).toContain("/fixture/customers/routes");
+  });
+
+  it("hides every one of them without the extension's features", () => {
+    const none = { ...manager, enabledFeatures: provisioned.filter((key) => !key.startsWith("fixture.")) };
+    const hrefs = compose(none).flatMap((group) => group.items.flatMap((item) => [item.href, ...item.kids.map((kid) => kid.href)]));
+    expect(hrefs.filter((href) => href.startsWith("/fixture"))).toEqual([]);
+    expect(compose(none).some((group) => group.id === "ext.fixture.gate")).toBe(false);
+  });
+});
+
+describe("an extension's layout, figures and people", () => {
+  const provisioned = getClientTemplateFeatureKeys("TEMPLATE_FIXTURE");
+  const manager = { role: "MANAGER", enabledFeatures: provisioned, workspaceProfile: "GENERAL" };
+  const context = { userId: "u1", companyId: "c1", role: "MANAGER" };
+
+  it("orders the groups and uses the trade's words while the workspace runs it", () => {
+    const layout = navLayoutFor(visibleAddresses(manager), "GENERAL");
+    const groups = composeNav({ canOpen: canOpenFor(manager), ...layout });
+    const ids = groups.map((group) => group.id).filter((id) => id !== "top");
+    expect(ids.slice(0, 3)).toEqual(["ext.fixture", "stock", "ext.fixture.gate"]);
+    const stock = groups.find((group) => group.id === "stock");
+    expect(stock?.label).toBe("Stores");
+    expect(stock?.items.find((item) => item.id === "onhand")?.label).toBe("Stock");
+  });
+
+  it("leaves a workspace that does not run it in core's order and words", () => {
+    const other = { ...manager, enabledFeatures: provisioned.filter((key) => !key.startsWith("fixture.")) };
+    const layout = navLayoutFor(visibleAddresses(other), "GENERAL");
+    expect(layout.order).toEqual([]);
+    expect(layout.groupLabels).toEqual({});
+    expect(composeNav({ canOpen: canOpenFor(other), ...layout }).find((group) => group.id === "stock")?.label).toBe("Stock");
+  });
+
+  it("counts its own rows only, and starts a person where their part of the trade works", async () => {
+    const reading = await readExtensionNav(context, manager);
+    expect(reading.badges).toEqual({ "/fixture/runs": "3" });
+    expect(reading.home).toBe("/fixture/runs");
+    expect(reading.phone).toEqual(["fixture.runs-open", "fixture.till"]);
+  });
+
+  it("drops a start page the person may not open", async () => {
+    const without = { ...manager, enabledFeatures: provisioned.filter((key) => key !== "fixture.runs") };
+    expect((await readExtensionNav(context, without)).home).toBeNull();
+  });
+
+  it("keeps the sidebar when an extension's figures fail", async () => {
+    const failing = { id: "fixture", badges: async () => { throw new Error("down"); }, persona: async () => { throw new Error("down"); } };
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await readExtensionNav(context, manager, [failing])).toEqual({ badges: {}, home: null, phone: [] });
+    spy.mockRestore();
+  });
+});
+
+describe("an extension's link into Management", () => {
+  const provisioned = getClientTemplateFeatureKeys("TEMPLATE_FIXTURE");
+  const settingsRow = (who: { role: string; enabledFeatures: string[]; workspaceProfile: string }) =>
+    composeNav({ canOpen: canOpenFor(who), products: productGroupsFor(visibleAddresses(who), "GENERAL") })
+      .flatMap((group) => group.items)
+      .find((item) => item.id === "fixture.settings");
+
+  it("shows to someone Management shows the row to, marked as Management's", () => {
+    const owner = { role: "SUPERADMIN", enabledFeatures: provisioned, workspaceProfile: "GENERAL" };
+    const kids = settingsRow(owner)?.kids ?? [];
+    expect(kids.map((kid) => kid.href)).toEqual(["/fixture/settings", "/preferences/organization/sites"]);
+    expect(kids[1]?.management).toBe("sites");
+  });
+
+  it("is hidden from someone Management does not show the row to", () => {
+    const clerk = { role: "STOCK_CLERK", enabledFeatures: provisioned, workspaceProfile: "GENERAL" };
+    expect(canOpenFor(clerk)("/preferences/organization/sites")).toBe(false);
+    expect(settingsRow(clerk)?.kids.map((kid) => kid.href) ?? []).not.toContain("/preferences/organization/sites");
   });
 });
 

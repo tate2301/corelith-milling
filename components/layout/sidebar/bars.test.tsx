@@ -54,6 +54,29 @@ describe("PhoneBar", () => {
   });
 });
 
+describe("PhoneBar with rows an extension chose", () => {
+  const parent = nodes.find((node) => node.kids.length > 1)!;
+  const kid = parent.kids[1]!;
+  const other = nodes.find((node) => node.id !== parent.id)!;
+
+  it("holds the chosen rows in order, a child standing on its own, skipping rows not drawn", () => {
+    mount(<PhoneBar groups={groups} active={null} prefs={NO_PREFS} rows={[kid.id, "nowhere", other.id]} onMore={() => {}} />);
+    expect([...host!.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([kid.href, other.href]);
+  });
+
+  it("marks a chosen child as the page, not its parent", () => {
+    const active = { nodeId: parent.id, kidId: kid.id, href: kid.href, label: kid.label, icon: kid.icon };
+    mount(<PhoneBar groups={groups} active={active} prefs={NO_PREFS} rows={[parent.id, kid.id]} onMore={() => {}} />);
+    const current = [...host!.querySelectorAll("a")].filter((a) => a.getAttribute("aria-current") === "page");
+    expect(current.map((a) => a.getAttribute("href"))).toEqual([kid.href]);
+  });
+
+  it("falls back to the usual four when none of the rows is drawn", () => {
+    mount(<PhoneBar groups={groups} active={null} prefs={NO_PREFS} rows={["nowhere"]} onMore={() => {}} />);
+    expect(host!.querySelectorAll("a")).toHaveLength(PHONE_DESTINATIONS);
+  });
+});
+
 describe("Rail", () => {
   it("has a mark for each top-level page, a hairline per group, and opens the sidebar", () => {
     const onOpen = vi.fn();

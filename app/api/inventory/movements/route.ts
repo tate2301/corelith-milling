@@ -21,6 +21,9 @@ const stockMovementSchema = z.object({
   notes: z.string().max(500).optional(),
   photoUrl: z.string().max(2048).optional(),
   unitCost: z.number().min(0).optional(),
+  /** What an issue went into (fuel to a generator), and its meter at the time. */
+  equipmentId: z.string().uuid().optional(),
+  meterReading: z.number().min(0).optional(),
   movementDate: z
     .string()
     .optional()
@@ -159,6 +162,8 @@ export async function POST(request: NextRequest) {
           // has always done.
           referenceId: attempt === 0 ? providedReferenceId : null,
           issuedTo: validated.issuedTo ?? null,
+          equipmentId: validated.equipmentId ?? null,
+          meterReading: validated.meterReading ?? null,
           requestedBy: validated.requestedBy ?? null,
           approvedBy: validated.approvedBy ?? null,
           notes: validated.notes ?? null,
@@ -210,6 +215,9 @@ export async function POST(request: NextRequest) {
           netAmount: movementAmount,
           taxAmount: 0,
           grossAmount: movementAmount,
+          // A count that finds more than the books hold is a gain: stock up,
+          // the adjustment account credited. The rule is written for a loss.
+          invertDirection: validated.movementType === 'ADJUSTMENT' && validated.quantity > 0,
         });
       } catch (error) {
         console.error('[Accounting] Stock movement auto-post failed:', error);
