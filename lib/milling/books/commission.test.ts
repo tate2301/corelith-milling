@@ -56,3 +56,17 @@ describe("seller commission, paid separately", () => {
     await expect(payCommission(prisma, actor(), { sellerId, amount: 1, bankAccountId: cashId })).rejects.toThrow("No commission is due");
   });
 });
+
+describe("the commission statement", () => {
+  it("explains each trip's commission and what each payment covered, and adds up", async () => {
+    const { commissionStatement } = await import("./commission-statement");
+    const statement = await commissionStatement(prisma, mill.companyId, sellerId);
+    // One trip: 40 bags at 25c = $10, paid as $6 then $4.
+    expect(statement.totals).toEqual({ earned: 10, paid: 10, due: 0 });
+    expect(statement.trips[0]?.products).toEqual([{ product: expect.any(String), bags: 40, perBag: 0.25, pct: 0, soldFor: 240, perBagPart: 10, sharePart: 0, earned: 10 }]);
+    expect(statement.trips[0]).toMatchObject({ earned: 10, paid: 10, due: 0 });
+    // Newest first: the $4 then the $6, each covering the trip.
+    expect(statement.payments.map((row) => [row.amount, row.covers.map((cover) => cover.amount)])).toEqual([[4, [4]], [6, [6]]]);
+    expect(statement.payments.every((row) => row.billNumber)).toBe(true);
+  });
+});

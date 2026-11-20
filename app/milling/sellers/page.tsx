@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
 
 import { PageChrome } from "@/components/layout/page-chrome";
+import { type CommissionStatement, wouldCover } from "@/components/milling/commission-bits";
 import { Field, FormError } from "@/components/milling/form-bits";
 import {
   formatWhen,
@@ -1015,11 +1016,15 @@ function SellersTab({
                     {board.books.mayPay && seller.commissionDue > 0 ? <PayCommission board={board} seller={seller} /> : null}
                   </span>
                 </div>
-                {seller.commissionDue > 0 ? (
-                  <div className="text-sm text-muted-foreground">
-                    Commission due <span className="font-mono">{money(seller.commissionDue)}</span>
-                  </div>
-                ) : null}
+                <Link href={`/milling/sellers/${seller.id}/commission`} className="text-sm text-muted-foreground underline underline-offset-4">
+                  {seller.commissionDue > 0 ? (
+                    <>
+                      Commission due <span className="font-mono">{money(seller.commissionDue)}</span>
+                    </>
+                  ) : (
+                    "Commission statement"
+                  )}
+                </Link>
               </li>
             ))}
           </ul>
@@ -1055,7 +1060,11 @@ function SellersTab({
                     >
                       {seller.owed > 0 ? money(seller.owed) : "Nothing"}
                     </TableCell>
-                    <TableCell className="text-right font-mono">{seller.commissionDue > 0 ? money(seller.commissionDue) : "—"}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      <Link href={`/milling/sellers/${seller.id}/commission`} className="underline underline-offset-4" title="Commission statement">
+                        {seller.commissionDue > 0 ? money(seller.commissionDue) : "Statement"}
+                      </Link>
+                    </TableCell>
                     <TableCell className="space-x-2 whitespace-nowrap text-right">
                       {board.books.mayPay && seller.commissionDue > 0 ? <PayCommission board={board} seller={seller} /> : null}
                       {canManage && seller.owed > 0 ? (
@@ -1390,6 +1399,12 @@ function PayCommission({ board, seller }: { board: Board; seller: Seller }) {
   const [amount, setAmount] = useState(seller.commissionDue.toFixed(2));
   const [bankAccountId, setAccount] = useState(board.books.accounts[0]?.id ?? "");
   const [unpaid, setUnpaid] = useState(false);
+  const statement = useQuery({
+    queryKey: ["milling", "seller-commission", seller.id],
+    queryFn: () => fetchJson<CommissionStatement>(`/api/milling/sellers/${seller.id}/commission`),
+    enabled: open,
+  });
+  const covers = statement.data ? wouldCover(statement.data.trips, Number(amount) || 0) : [];
   const save = useMillPost<{ paidInBooks: boolean }>({
     done: "Commission recorded",
     // The bill is in Books either way; when Books could not record the payment, it has to be paid there.
@@ -1413,6 +1428,24 @@ function PayCommission({ board, seller }: { board: Board; seller: Seller }) {
             <Field id="pc-amount" label="Amount paid">
               <Input id="pc-amount" inputMode="decimal" className="font-mono" value={amount} onChange={(event) => setAmount(event.target.value)} />
             </Field>
+            {covers.length ? (
+              <div className="text-sm">
+                <p className="text-muted-foreground">This pays the oldest commission first:</p>
+                <ul className="mt-1 space-y-0.5">
+                  {covers.map((row) => (
+                    <li key={row.code} className="flex justify-between gap-2">
+                      <span>
+                        <span className="font-mono">{row.code}</span> {row.clears ? "paid" : "part paid"}
+                      </span>
+                      <span className="font-mono">{money(row.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link href={`/milling/sellers/${seller.id}/commission`} className="mt-1 inline-block underline underline-offset-4">
+                  See the statement
+                </Link>
+              </div>
+            ) : null}
             {board.books.accounts.length ? (
               <Field id="pc-account" label="Paid from">
                 <MillSelect id="pc-account" value={bankAccountId} onChange={setAccount} options={board.books.accounts.map((row) => ({ value: row.id, label: `${row.name} (${row.currency})` }))} />
