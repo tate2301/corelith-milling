@@ -1,5 +1,7 @@
 import type { ExtensionNavServer } from "@/lib/extensions/server-types";
 
+import { MILLING_NAV } from "./milling/nav-server";
+
 /**
  * Server-only sidebar parts of this deployment's extensions: the counts on
  * their rows, and each person's start page and phone bar
@@ -12,4 +14,4 @@ import type { ExtensionNavServer } from "@/lib/extensions/server-types";
  *   import { MILLING_NAV } from "./milling/nav-server";
  *   export const registeredExtensionNav: readonly ExtensionNavServer[] = [MILLING_NAV];
  */
-export const registeredExtensionNav: readonly ExtensionNavServer[] = [];
+export const registeredExtensionNav: readonly ExtensionNavServer[] = [MILLING_NAV];

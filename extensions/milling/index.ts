@@ -62,9 +62,12 @@ export const milling: CorelithExtension = {
       featureKeys: [],
       verticalProductId: "general-business",
       // ENTERPRISE carries the shop, CRM and portal suites. A mill keeps the
-      // customer list (deliveries and debtors need it) and turns off the rest
-      // until gate sales are built for it. The mine's daily capture screens
-      // never reach another vertical.
+      // customer list (deliveries and debtors need it) and sells at the gate
+      // through core's fiscalised till (canvas GT): the till, its sales,
+      // shifts and cash-ups, the catalogue and price lists, and the till's
+      // portal. It buys maize through intake, not the shop's buying, and runs
+      // no promotions. The mine's daily capture screens never reach another
+      // vertical.
       disabledFeatureKeys: [
         "ops.shift-report.submit",
         "ops.attendance.mark",
@@ -72,13 +75,8 @@ export const milling: CorelithExtension = {
         "reports.shift",
         "reports.attendance",
         "reports.plant",
-        "retail.core",
-        "retail.pos",
-        "retail.catalog",
         "retail.purchasing",
         "retail.promotions",
-        "retail.shifts",
-        "retail.reports",
         "crm.core",
         "crm.leads",
         "crm.clients",
@@ -88,8 +86,6 @@ export const milling: CorelithExtension = {
         "crm.insights",
         "crm.commissions",
         "crm.settings",
-        "portal.core",
-        "portal.pos",
         "portal.schools",
         "schools.core",
       ],
@@ -129,24 +125,102 @@ export const milling: CorelithExtension = {
       "POWER",
     ],
   },
+  // The canvas's navigation (NV01–NV04): the mill first, then the shared
+  // modules as the canvas names them. The mill adds rows to Stores and
+  // Maintenance rather than keeping its own copies, and its settings link to
+  // the Management rows that already hold sites, approvals and numbering.
   nav: {
     label: "The mill",
     nodes: [
       { id: "milling.home", label: "Overview", icon: "home", href: "/milling" },
-      { id: "milling.plan", label: "Plan", icon: "calendar", href: "/milling/plan" },
-      { id: "milling.shifts", label: "Shifts", icon: "shift", href: "/milling/shifts" },
       { id: "milling.intake", label: "Intake", icon: "purchase-order-check", href: "/milling/intake" },
-      { id: "milling.production", label: "Production", icon: "plant", href: "/milling/production" },
+      {
+        id: "milling.production",
+        label: "Production",
+        icon: "plant",
+        href: "/milling/production",
+        kids: [
+          { id: "milling.runs", label: "Runs", icon: "plant", href: "/milling/production" },
+          { id: "milling.plan", label: "Plan", icon: "calendar", href: "/milling/plan" },
+          { id: "milling.shifts", label: "Shifts", icon: "shift", href: "/milling/shifts" },
+          { id: "milling.packing", label: "Packing", icon: "checks", href: "/milling/packing" },
+          { id: "milling.downtime", label: "Downtime", icon: "alert-circle", href: "/milling/maintenance?tab=stops" },
+          { id: "milling.generator", label: "Generator log", icon: "activity", href: "/milling/maintenance?tab=generator" },
+        ],
+      },
       { id: "milling.quality", label: "Quality", icon: "seal-check", href: "/milling/quality" },
-      { id: "milling.packing", label: "Packing", icon: "checks", href: "/milling/packing" },
-      { id: "milling.stock", label: "Stock", icon: "stockroom", href: "/milling/stock" },
-      { id: "milling.orders", label: "Orders", icon: "purchase-order", href: "/milling/orders" },
-      { id: "milling.deliveries", label: "Deliveries", icon: "dispatch", href: "/milling/deliveries" },
-      { id: "milling.machines", label: "Machines", icon: "job-card", href: "/milling/maintenance" },
+      {
+        id: "milling.despatch",
+        label: "Despatch",
+        icon: "dispatch",
+        href: "/milling/deliveries",
+        kids: [
+          { id: "milling.deliveries", label: "Despatches", icon: "dispatch", href: "/milling/deliveries" },
+          { id: "milling.trips", label: "Trips", icon: "activity", href: "/milling/trips" },
+          { id: "milling.routes", label: "Routes", icon: "link", href: "/milling/routes" },
+          { id: "milling.orders", label: "Orders", icon: "purchase-order", href: "/milling/orders" },
+          { id: "milling.sellers", label: "Sellers", icon: "employee", href: "/milling/sellers" },
+        ],
+      },
       { id: "milling.exceptions", label: "Exceptions", icon: "alert-circle", href: "/milling/exceptions" },
-      { id: "milling.trace", label: "Trace", icon: "link", href: "/milling/trace" },
-      { id: "milling.reports", label: "Reports", icon: "chart-bar", href: "/milling/reports" },
-      { id: "milling.settings", label: "Settings", icon: "checklist", href: "/milling/settings" },
+      {
+        id: "milling.reports",
+        label: "Reports",
+        icon: "chart-bar",
+        href: "/milling/reports",
+        kids: [
+          { id: "milling.director", label: "Yesterday at a glance", icon: "chart-line", href: "/milling/director" },
+          { id: "milling.r-daily", label: "Daily operations report", icon: "chart-bar", href: "/milling/reports/milling-daily-operations" },
+          { id: "milling.r-production", label: "Maize to production", icon: "chart-bar", href: "/milling/reports/milling-production" },
+          { id: "milling.r-quality", label: "Quality results", icon: "chart-bar", href: "/milling/reports/milling-qc" },
+          { id: "milling.r-downtime", label: "Downtime hours", icon: "chart-bar", href: "/milling/reports/milling-downtime" },
+          { id: "milling.r-generator", label: "Fuel and generators", icon: "chart-bar", href: "/milling/reports/milling-generator" },
+          { id: "milling.r-stock", label: "Stock", icon: "chart-bar", href: "/milling/reports/milling-stock" },
+          { id: "milling.r-intake", label: "Intake and deductions", icon: "chart-bar", href: "/milling/reports/milling-intake" },
+          { id: "milling.trace", label: "Trace", icon: "link", href: "/milling/trace" },
+          { id: "milling.r-all", label: "All mill reports", icon: "rows", href: "/milling/reports" },
+        ],
+      },
+      {
+        id: "milling.settings",
+        label: "Settings",
+        icon: "checklist",
+        href: "/milling/settings/general",
+        kids: [
+          { id: "milling.s-lines", label: "Mill lines", icon: "plant", href: "/milling/settings/stages" },
+          { id: "milling.s-recipes", label: "Pack recipes", icon: "checks", href: "/milling/settings/recipes" },
+          { id: "milling.s-rules", label: "Intake rules", icon: "purchase-order-check", href: "/milling/settings/general" },
+          { id: "milling.s-specs", label: "Specs", icon: "seal-check", href: "/milling/settings/qc-specs" },
+          { id: "milling.s-bins", label: "Bins and stores", icon: "stockroom", href: "/milling/settings/locations" },
+          { id: "milling.s-vehicles", label: "Vehicles", icon: "dispatch", href: "/milling/settings/vehicles" },
+          { id: "milling.s-destinations", label: "Destinations", icon: "link", href: "/milling/settings/destinations" },
+          { id: "milling.s-duties", label: "Shift duties", icon: "shift", href: "/milling/settings/duties" },
+          { id: "milling.s-groups", label: "Who does what", icon: "people", href: "/milling/settings/groups" },
+          { id: "milling.s-shop", label: "Gate sales shop", icon: "receipt", href: "/milling/settings/shop" },
+          { id: "milling.s-go-live", label: "Go-live", icon: "checks", href: "/milling/go-live" },
+          { id: "milling.s-sites", label: "Sites and sections", icon: "site", href: "/preferences/organization/sites", management: "sites" },
+          { id: "milling.s-approvals", label: "Approvals", icon: "approval", href: "/retail/manage/approvals", management: "approvals" },
+          { id: "milling.s-numbering", label: "Numbering", icon: "numbering", href: "/books/settings/numbering", management: "bnum" },
+          { id: "milling.s-schedules", label: "Report schedules", icon: "reports", href: "/management/reports", management: "reports" },
+        ],
+      },
     ],
+    additions: [
+      { into: "stock", id: "milling.lots", label: "Lots and bins", icon: "stockroom", href: "/milling/stock" },
+      // Gate sales (NV02, GT): core's till and its price lists, beside core's sales and cash-ups.
+      { into: "tender", id: "milling.till", label: "Till", icon: "receipt", href: "/milling/gate-till" },
+      { into: "tender", id: "milling.price-lists", label: "Price lists", icon: "price-list", href: "/milling/price-lists" },
+      // Customers (NV02): the mill adds visits, surveys and collections beside core's customer list.
+      { into: "records", id: "milling.rep", label: "Today's route", icon: "link", href: "/milling/rep" },
+      { into: "records", id: "milling.visits", label: "Visits", icon: "calendar-check", href: "/milling/visits" },
+      { into: "records", id: "milling.surveys", label: "Surveys", icon: "checklist", href: "/milling/surveys" },
+      { into: "records", id: "milling.collections", label: "Collections", icon: "money", href: "/milling/collections" },
+      { into: "assets", id: "milling.machines", label: "Machine release", icon: "job-card", href: "/milling/maintenance" },
+    ],
+    order: ["ext.milling", "stock", "tender", "records", "books", "assets", "people", "insights"],
+    labels: {
+      groups: { stock: "Stores", tender: "Gate sales", records: "Customers", assets: "Maintenance", insights: "Reports" },
+      rows: { onhand: "Stock", everyone: "Employees", rosters: "Roster", timeoff: "Leave", shifts: "Cash-up" },
+    },
   },
 };
