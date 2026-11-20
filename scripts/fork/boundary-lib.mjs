@@ -20,6 +20,7 @@ export function allowedPaths(flavour) {
     { pattern: /^extensions\/index\.ts$/, label: "extensions/index.ts" },
     { pattern: /^extensions\/server\.ts$/, label: "extensions/server.ts" },
     { pattern: /^extensions\/nav-server\.ts$/, label: "extensions/nav-server.ts" },
+    { pattern: /^extensions\/payroll-server\.ts$/, label: "extensions/payroll-server.ts" },
     { pattern: new RegExp(`^extensions/${f}/`), label: `extensions/${flavour}/**` },
     { pattern: new RegExp(`^lib/${f}/`), label: `lib/${flavour}/**` },
     { pattern: new RegExp(`^app/${f}/`), label: `app/${flavour}/**` },

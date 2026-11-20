@@ -28,3 +28,30 @@ export interface ExtensionNavServer {
   /** Where this person starts and what their phone bar holds, from the extension's own roles. */
   persona?: (context: ExtensionNavContext) => Promise<ExtensionPersona | null>;
 }
+
+/** The pay period a payroll run is being assembled for, and whose pay it is. */
+export type ExtensionPayrollContext = {
+  companyId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  employeeIds: readonly string[];
+};
+
+/** One earning an extension adds to an employee's pay for the period, such as a seller's commission. */
+export type ExtensionEarning = {
+  employeeId: string;
+  /** The line's name on the payslip, e.g. "Seller commission". */
+  name: string;
+  /** In the currency given; zero or less is ignored. */
+  amount: number;
+  currency: string;
+  /** Taxable like pay unless the extension says it is not. */
+  taxable?: boolean;
+};
+
+export interface ExtensionPayrollServer {
+  /** The extension's id, as in `extensions/index.ts`. */
+  id: string;
+  /** Earnings for the period, for the employees given. Asked each time a run is assembled, so it must give the same answer for the same period. */
+  earnings: (context: ExtensionPayrollContext) => Promise<ExtensionEarning[]>;
+}
