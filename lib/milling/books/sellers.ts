@@ -5,6 +5,8 @@ import { writePlatformAuditEvent } from "@/lib/audit/platform";
 import { canDo, type BooksActor } from "@/lib/books/core/can-do";
 import { ReceiptRefused } from "@/lib/books/core/receipt-facts";
 import { createSalesInvoice, InvoiceRefused } from "@/lib/books/create-invoice";
+import { deleteInvoice } from "@/lib/books/delete-invoice";
+import { DraftInvoiceRefused, issueDraftInvoice } from "@/lib/books/issue-invoice";
 import { openInvoicesFor, recordBooksPayment } from "@/lib/books/payment-create";
 import { allocateOldestFirst } from "@/lib/books/payment-form";
 
@@ -137,20 +139,35 @@ export async function postSellerTrip(db: Db, actor: BooksActor, args: { tripId: 
         return { productId, description: `${products.find((product) => product.id === productId)?.name ?? "Bags"}, ${trip.code}`, quantity: entry.sold, ...exTax(entry.price, entry.sold, inclusive, rate), taxCodeId: taxCode?.id };
       });
     try {
-      const invoice = await createSalesInvoice(
+      // Drafted first and checked: an invoice that does not say what the mill says the seller owes is
+      // deleted before it is issued, so nothing reaches the ledger that the two would disagree on.
+      const draft = await createSalesInvoice(
         { companyId: actor.companyId, userId: actor.userId },
-        { customerId: customer.id, invoiceDate: day(trip.tripDate), notes: `Seller trip ${trip.code}`, issueNow: true, lines },
+        { customerId: customer.id, invoiceDate: day(trip.tripDate), notes: `Seller trip ${trip.code}`, issueNow: false, lines },
       );
-      // Guard: the invoice must say what the mill says the seller owes.
-      if (Math.abs(Number(invoice.total) - Number(trip.amountDue)) > 0.005) {
-        throw millRefusal(`Books made the invoice $${Number(invoice.total).toFixed(2)}, not the $${Number(trip.amountDue).toFixed(2)} the seller owes. Check the tax on the seller's customer in Books.`);
+      if (Math.abs(Number(draft.total) - Number(trip.amountDue)) > 0.005) {
+        await deleteInvoice(actor, draft.id, { reason: `Seller trip ${trip.code}: total did not match` }).catch(() => undefined);
+        throw millRefusal(`Books would make the invoice $${Number(draft.total).toFixed(2)}, not the $${Number(trip.amountDue).toFixed(2)} the seller owes. Check the tax on the seller's customer in Books.`);
       }
-      invoiceId = invoice.id;
-      await db.millingSellerTrip.update({ where: { id: trip.id }, data: { invoiceId } });
+      // Linked before issuing, so a failure from here is retried on this draft, never a second one.
+      await db.millingSellerTrip.update({ where: { id: trip.id }, data: { invoiceId: draft.id } });
+      await issueDraftInvoice({ companyId: actor.companyId, userId: actor.userId }, draft.id);
+      invoiceId = draft.id;
       await writePlatformAuditEvent({ companyId: actor.companyId, actorId: actor.userId, eventType: "milling.seller-trip.invoiced", entityType: SELLER_TRIP_ENTITY, entityId: trip.id, payload: { invoiceId } });
     } catch (error) {
-      if (error instanceof InvoiceRefused) throw millRefusal(error.message);
+      if (error instanceof InvoiceRefused || error instanceof DraftInvoiceRefused) throw millRefusal(error.message);
       throw error;
+    }
+  } else if (invoiceId) {
+    // A draft left by a failed issue: issue it now.
+    const existing = await db.salesInvoice.findFirst({ where: { id: invoiceId, companyId: actor.companyId }, select: { status: true } });
+    if (existing?.status === "DRAFT") {
+      try {
+        await issueDraftInvoice({ companyId: actor.companyId, userId: actor.userId }, invoiceId);
+      } catch (error) {
+        if (error instanceof DraftInvoiceRefused) throw millRefusal(error.message);
+        throw error;
+      }
     }
   }
 
