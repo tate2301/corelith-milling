@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { can, type MillAccess } from "../access/groups";
+import type { BulkAction, BulkKind } from "./decide-many";
 import { millDay } from "../sellers/trips";
 import { millSite } from "../stock/views";
 import { millDayWindow } from "./daily";
@@ -24,6 +25,8 @@ export interface WaitingRow {
   sentBy: string | null;
   sentAt: Date;
   quantity: string | null;
+  /** Set when the decision is one press, so the row can be chosen with others (plans, shifts). */
+  bulk?: { kind: BulkKind; actions: BulkAction[] };
 }
 
 const kg = (value: unknown) => `${Number(value).toLocaleString("en-ZW", { maximumFractionDigits: 1 })} kg`;
@@ -43,11 +46,11 @@ export async function waitingFor(db: Db, companyId: string, access: Pick<MillAcc
   ]);
   const heldUnits = held.length ? await db.product.findMany({ where: { id: { in: held.map((row) => row.productId) } }, select: { id: true, unit: true } }) : [];
   const rows: WaitingRow[] = [
-    ...plans.map((row) => ({ key: row.id, code: row.code, what: "Production plan", href: `/milling/plan/${row.id}`, sentById: row.createdById, sentAt: row.updatedAt, quantity: kg(row.lines.reduce((sum, line) => sum + Number(line.kg), 0)) })),
+    ...plans.map((row) => ({ key: row.id, code: row.code, what: "Production plan", href: `/milling/plan/${row.id}`, sentById: row.createdById, sentAt: row.updatedAt, quantity: kg(row.lines.reduce((sum, line) => sum + Number(line.kg), 0)), bulk: { kind: "plan" as const, actions: ["approve", "send-back"] as BulkAction[] } })),
     ...runs.map((row) => ({ key: row.id, code: row.code, what: "Run", href: `/milling/production/${row.id}`, sentById: row.completedById ?? row.createdById, sentAt: row.updatedAt, quantity: `${kg(row.maizeIssuedKg)} in` })),
     ...intakes.map((row) => ({ key: row.id, code: row.code, what: "Intake ticket", href: `/milling/intake/${row.id}`, sentById: row.receivedById, sentAt: row.receivedAt, quantity: kg(row.netKg) })),
     ...exceptions.map((row) => ({ key: row.id, code: row.code, what: row.title, href: "/milling/exceptions", sentById: row.raisedById, sentAt: row.createdAt, quantity: null })),
-    ...shifts.map((row) => ({ key: row.id, code: row.code, what: "Shift to approve", href: `/milling/shifts/${row.id}`, sentById: row.createdById, sentAt: row.updatedAt, quantity: null })),
+    ...shifts.map((row) => ({ key: row.id, code: row.code, what: "Shift to approve", href: `/milling/shifts/${row.id}`, sentById: row.createdById, sentAt: row.updatedAt, quantity: null, bulk: { kind: "shift" as const, actions: ["approve"] as BulkAction[] } })),
     ...deliveries.map((row) => ({ key: row.id, code: row.code, what: "Delivery to reconcile", href: `/milling/deliveries/${row.id}`, sentById: row.driverId, sentAt: row.deliveredAt ?? row.updatedAt, quantity: null })),
     ...trips.map((row) => ({ key: row.id, code: row.code, what: "Seller still out", href: "/milling/sellers", sentById: row.issuedById, sentAt: row.issuedAt, quantity: null })),
     ...held.map((row) => {
