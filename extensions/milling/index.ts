@@ -173,6 +173,7 @@ export const milling: CorelithExtension = {
         icon: "chart-bar",
         href: "/milling/reports",
         kids: [
+          { id: "milling.director", label: "Yesterday at a glance", icon: "chart-line", href: "/milling/director" },
           { id: "milling.r-daily", label: "Daily operations report", icon: "chart-bar", href: "/milling/reports/milling-daily-operations" },
           { id: "milling.r-production", label: "Maize to production", icon: "chart-bar", href: "/milling/reports/milling-production" },
           { id: "milling.r-quality", label: "Quality results", icon: "chart-bar", href: "/milling/reports/milling-qc" },
@@ -209,6 +210,11 @@ export const milling: CorelithExtension = {
     ],
     additions: [
       { into: "stock", id: "milling.lots", label: "Lots and bins", icon: "stockroom", href: "/milling/stock" },
+      // Customers (NV02): the mill adds visits, surveys and collections beside core's customer list.
+      { into: "records", id: "milling.rep", label: "Today's route", icon: "link", href: "/milling/rep" },
+      { into: "records", id: "milling.visits", label: "Visits", icon: "calendar-check", href: "/milling/visits" },
+      { into: "records", id: "milling.surveys", label: "Surveys", icon: "checklist", href: "/milling/surveys" },
+      { into: "records", id: "milling.collections", label: "Collections", icon: "money", href: "/milling/collections" },
       { into: "assets", id: "milling.machines", label: "Machine release", icon: "job-card", href: "/milling/maintenance" },
     ],
     order: ["ext.milling", "stock", "tender", "records", "books", "assets", "people", "insights"],

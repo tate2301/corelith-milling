@@ -20,6 +20,11 @@ describe("where each person starts (NV03)", () => {
     expect(millPersonaFor("CLERK", { groups: ["STORES"] })?.home).toBe("/milling/intake");
   });
 
+  it("opens a sales rep on today's route and the director on yesterday at a glance", () => {
+    expect(millPersonaFor("CLERK", { groups: ["SALES_REP"] })?.home).toBe("/milling/rep");
+    expect(millPersonaFor("CLERK", { groups: ["DIRECTOR"] })?.home).toBe("/milling/director");
+  });
+
   it("uses the main job when a person holds several groups", () => {
     expect(millPersonaFor("CLERK", { groups: ["DRIVER", "STORES"] })?.home).toBe("/milling/intake");
   });
@@ -31,7 +36,7 @@ describe("where each person starts (NV03)", () => {
   });
 
   it("names only rows the sidebar has, at most four", () => {
-    for (const groups of [["MANAGEMENT"], ["SUPERVISOR"], ["QUALITY"], ["DISPATCH"], ["STORES"], ["OPERATOR"], ["DRIVER"], ["ADMIN"]] as const) {
+    for (const groups of [["MANAGEMENT"], ["SUPERVISOR"], ["QUALITY"], ["DISPATCH"], ["STORES"], ["OPERATOR"], ["DRIVER"], ["SALES_REP"], ["DIRECTOR"], ["ADMIN"]] as const) {
       const phone = millPersonaFor("CLERK", { groups: [...groups] })?.phone ?? [];
       expect(phone.length).toBeLessThanOrEqual(4);
       for (const id of phone) expect(ROWS.has(id), `${groups[0]}: ${id}`).toBe(true);

@@ -18,6 +18,8 @@ const PERSONAS: ReadonlyArray<{ group: MillGroupCode; persona: Required<Extensio
   { group: "STORES", persona: { home: "/milling/intake", phone: ["milling.intake", "onhand", "counts", "milling.lots"] } },
   { group: "OPERATOR", persona: { home: "/milling/production", phone: ["milling.runs", "milling.downtime"] } },
   { group: "DRIVER", persona: { home: "/milling/deliveries", phone: ["milling.deliveries"] } },
+  { group: "SALES_REP", persona: { home: "/milling/rep", phone: ["milling.rep", "customers", "milling.visits", "milling.collections"] } },
+  { group: "DIRECTOR", persona: { home: "/milling/director", phone: ["milling.director", "milling.reports"] } },
   { group: "ADMIN", persona: { home: "/milling/settings/general", phone: ["milling.home", "milling.settings"] } },
 ];
 

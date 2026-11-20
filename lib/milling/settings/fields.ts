@@ -195,4 +195,5 @@ export const GENERAL_SETTINGS_FIELDS: readonly SettingsField[] = [
   { key: "shiftCrewSize", label: "Crew on a shift", type: "number", required: true, min: 1, max: 100 },
   { key: "sellerMaxDiscount", label: "Most a seller may take off a bag", type: "number", unit: "$", required: true, min: 0, max: 100, help: "Discounts above this are refused when a seller settles." },
   { key: "sellerDiscountStep", label: "Seller discounts go in steps of", type: "number", unit: "$", required: true, min: 0.01, max: 100, help: "10c steps: 0.10." },
+  { key: "extractionTargetPct", label: "Extraction target", type: "number", unit: "%", required: true, min: 1, max: 100, help: "Meal out of maize milled; the director is told when a day falls short." },
 ];

@@ -35,6 +35,8 @@ model MillingSettings {
   /// The most a seller may take off one bag, and the steps it comes in (10c up to $1).
   sellerMaxDiscount           Decimal  @default(1) @db.Decimal(8, 2)
   sellerDiscountStep          Decimal  @default(0.1) @db.Decimal(8, 2)
+  /// Meal out of maize milled the mill aims for; the director's Overview says when a day falls short.
+  extractionTargetPct         Decimal  @default(72) @db.Decimal(5, 2)
   updatedAt                   DateTime @updatedAt
   updatedById                 String?
 }
@@ -948,4 +950,56 @@ model MillingSellerCommissionPayout {
   notes         String?
 
   @@index([companyId, sellerId])
+}
+
+/// A rep's visit to a shop: what the competition charges, our bags on the shelf and our share of it.
+model MillingVisit {
+  id              String   @id @default(uuid())
+  companyId       String
+  /// The core Customer visited.
+  customerId      String
+  /// The core CustomerRoute it was visited on, if any.
+  routeId         String?
+  repUserId       String
+  visitedAt       DateTime @default(now())
+  /// The competitor's price for a bag like ours, in USD.
+  competitorPrice Decimal? @db.Decimal(10, 2)
+  ourBagsOnShelf  Int?
+  shelfSharePct   Decimal? @db.Decimal(5, 2)
+  photoUrl        String?
+  note            String?
+  latitude        Decimal? @db.Decimal(9, 6)
+  longitude       Decimal? @db.Decimal(9, 6)
+
+  @@index([companyId, visitedAt])
+  @@index([companyId, customerId])
+  @@index([companyId, routeId])
+}
+
+/// A customer's promise to pay, recorded when chasing what they owe.
+model MillingPaymentPromise {
+  id          String   @id @default(uuid())
+  companyId   String
+  customerId  String
+  amount      Decimal  @db.Decimal(12, 2)
+  promisedFor DateTime @db.Date
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([companyId, customerId])
+}
+
+/// What the mill lets a customer owe, and how long they have to pay.
+model MillingCustomerTerms {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// The core Customer.
+  customerId  String
+  creditLimit Decimal? @db.Decimal(12, 2)
+  termsDays   Int      @default(14)
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  @@unique([companyId, customerId])
 }

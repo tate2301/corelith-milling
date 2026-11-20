@@ -335,6 +335,7 @@ export async function getGeneralSettings(db: PrismaClient, companyId: string) {
     shiftCrewSize: row.shiftCrewSize,
     sellerMaxDiscount: Number(row.sellerMaxDiscount),
     sellerDiscountStep: Number(row.sellerDiscountStep),
+    extractionTargetPct: Number(row.extractionTargetPct),
   };
 }
 
