@@ -177,7 +177,7 @@ function EditStops({ route, customers }: { route: Route; customers: Lookups["cus
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Stops on {route.code}</DialogTitle>
-            <DialogDescription>First stop at the top. A customer on another route moves to this one.</DialogDescription>
+            <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">First stop at the top. A customer on another route moves to this one.</DialogDescription>
           </DialogHeader>
           <ol className="divide-y divide-border rounded-md border border-border">
             {order.map((id, index) => (

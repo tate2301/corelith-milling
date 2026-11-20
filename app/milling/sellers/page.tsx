@@ -45,6 +45,7 @@ type Seller = {
   number: string;
   isActive: boolean;
   owed: number;
+  commissionDue: number;
   outOn: { id: string; code: string; date: string } | null;
 };
 type TripProduct = {
@@ -102,6 +103,7 @@ type Board = {
   products: Product[];
   books: {
     mayPost: boolean;
+    mayPay: boolean;
     accounts: Array<{ id: string; name: string; currency: string }>;
     repayments: Array<{ id: string; sellerId: string; seller: string; amount: number; receivedAt: string }>;
   };
@@ -508,7 +510,7 @@ function GiveBags({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Give a seller their bags</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">
               One trip a day. The oldest released bags go first, and they stay
               the mill&apos;s until the seller settles.
             </DialogDescription>
@@ -716,7 +718,7 @@ function SettleTrip({
           <DialogTitle>
             Settle {trip.code}, {trip.seller}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">
             Count the bags brought back first. Bags not brought back are sold,
             at full price less the discounts given.
           </DialogDescription>
@@ -1010,8 +1012,14 @@ function SellersTab({
                     {canManage && seller.isActive && !seller.outOn ? (
                       <GiveBags board={board} preset={seller.id} />
                     ) : null}
+                    {board.books.mayPay && seller.commissionDue > 0 ? <PayCommission board={board} seller={seller} /> : null}
                   </span>
                 </div>
+                {seller.commissionDue > 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    Commission due <span className="font-mono">{money(seller.commissionDue)}</span>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -1023,6 +1031,7 @@ function SellersTab({
                   <TableHead>Number</TableHead>
                   <TableHead>Today</TableHead>
                   <TableHead className="text-right">Owes</TableHead>
+                  <TableHead className="text-right">Commission due</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -1046,7 +1055,9 @@ function SellersTab({
                     >
                       {seller.owed > 0 ? money(seller.owed) : "Nothing"}
                     </TableCell>
+                    <TableCell className="text-right font-mono">{seller.commissionDue > 0 ? money(seller.commissionDue) : "—"}</TableCell>
                     <TableCell className="space-x-2 whitespace-nowrap text-right">
+                      {board.books.mayPay && seller.commissionDue > 0 ? <PayCommission board={board} seller={seller} /> : null}
                       {canManage && seller.owed > 0 ? (
                         <Button size="sm" onClick={() => setPaying(seller)}>
                           Take payment
@@ -1101,7 +1112,7 @@ function TakePayment({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Payment from {seller.name}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">
             They owe <span className="font-mono">{money(seller.owed)}</span>.
             Once it is paid they can take bags again.
           </DialogDescription>
@@ -1171,7 +1182,7 @@ function AddSeller({ board }: { board: Board }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add a seller</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">
               Sellers are the mill&apos;s employees. Commission is paid on what
               they sell.
             </DialogDescription>
@@ -1284,7 +1295,7 @@ function EditRate({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Commission on {product.name}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">
             Trips already out keep the rate they went out with.
           </DialogDescription>
         </DialogHeader>
@@ -1345,7 +1356,7 @@ function PostToBooks({ board, label, title, url, detail }: { board: Board; label
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{detail}</DialogDescription>
+            <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">{detail}</DialogDescription>
           </DialogHeader>
           {board.books.accounts.length ? (
             <Field id="pb-account" label="Cash went into">
@@ -1361,6 +1372,63 @@ function PostToBooks({ board, label, title, url, detail }: { board: Board; label
             </Button>
             <Button disabled={save.pending || !bankAccountId} onClick={() => save.post(url, { bankAccountId })}>
               Post
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/**
+ * Pay a seller the commission they have earned, separately from payroll: a paid
+ * bill to them in Books. It is never taken off what they owe the mill; each is
+ * settled on its own.
+ */
+function PayCommission({ board, seller }: { board: Board; seller: Seller }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(seller.commissionDue.toFixed(2));
+  const [bankAccountId, setAccount] = useState(board.books.accounts[0]?.id ?? "");
+  const [unpaid, setUnpaid] = useState(false);
+  const save = useMillPost<{ paidInBooks: boolean }>({
+    done: "Commission recorded",
+    // The bill is in Books either way; when Books could not record the payment, it has to be paid there.
+    onDone: (result) => (result.paidInBooks ? setOpen(false) : setUnpaid(true)),
+  });
+  return (
+    <>
+      <Button size="sm" variant="secondary" onClick={() => (setAmount(seller.commissionDue.toFixed(2)), setOpen(true))}>
+        Pay commission
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Commission for {seller.name}</DialogTitle>
+            <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">
+              Due <span className="font-mono">{money(seller.commissionDue)}</span> from settled trips. Paid separately from payroll, as a paid bill to them in Books.
+              {seller.owed > 0 ? ` They also owe the mill ${money(seller.owed)}; that is settled on its own, not taken off this.` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field id="pc-amount" label="Amount paid">
+              <Input id="pc-amount" inputMode="decimal" className="font-mono" value={amount} onChange={(event) => setAmount(event.target.value)} />
+            </Field>
+            {board.books.accounts.length ? (
+              <Field id="pc-account" label="Paid from">
+                <MillSelect id="pc-account" value={bankAccountId} onChange={setAccount} options={board.books.accounts.map((row) => ({ value: row.id, label: `${row.name} (${row.currency})` }))} />
+              </Field>
+            ) : (
+              <p className="text-sm text-muted-foreground">Books has no money account yet. Add one in Books, under Bank &amp; cash.</p>
+            )}
+            <FormError error={save.error} />
+            {unpaid ? <p className="text-sm text-destructive">The bill is in Books, but Books did not record the payment. Pay it in Books, under Bills &amp; spending.</p> : null}
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => (setOpen(false), setUnpaid(false))}>
+              {unpaid ? "Close" : "Cancel"}
+            </Button>
+            <Button disabled={save.pending || !bankAccountId || unpaid} onClick={() => save.post(`/api/milling/sellers/${seller.id}/commission`, { amount: Number(amount), bankAccountId })}>
+              Pay
             </Button>
           </DialogFooter>
         </DialogContent>

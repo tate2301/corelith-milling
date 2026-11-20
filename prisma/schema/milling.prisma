@@ -813,6 +813,8 @@ model MillingSeller {
   employeeId  String
   /// The seller as a Books customer: their trips are invoiced to it, so what they owe shows in Books' debtors.
   customerId  String?
+  /// The seller as a Books supplier: their commission is paid to it, outside payroll.
+  vendorId    String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   createdById String
@@ -928,6 +930,22 @@ model MillingSellerPayment {
   /// When the money went into Books, and the receipt numbers it made there.
   postedAt     DateTime?
   booksReference String?
+
+  @@index([companyId, sellerId])
+}
+
+/// Commission paid to a seller, separately from payroll: a paid bill to them in Books.
+model MillingSellerCommissionPayout {
+  id            String   @id @default(uuid())
+  companyId     String
+  sellerId      String
+  amount        Decimal  @db.Decimal(12, 2)
+  bankAccountId String
+  /// The Books bill it was paid through, once made.
+  billId        String?
+  paidById      String
+  paidAt        DateTime @default(now())
+  notes         String?
 
   @@index([companyId, sellerId])
 }

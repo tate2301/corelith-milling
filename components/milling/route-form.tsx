@@ -32,7 +32,7 @@ export function RouteForm({ vehicles, route, label, onSaved }: { vehicles: Route
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{route ? `Edit ${route.code}` : "New route"}</DialogTitle>
-            <DialogDescription>Customers are put on the route, in order, from the route&apos;s own page.</DialogDescription>
+            <DialogDescription className="not-sr-only t-body-sm text-[var(--text-muted)]">Customers are put on the route, in order, from the route&apos;s own page.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-[8rem_1fr] gap-3">

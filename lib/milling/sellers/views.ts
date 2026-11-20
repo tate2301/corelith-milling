@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { commissionDue } from "../books/commission";
 import { getGeneralSettings } from "../settings/server";
 import { millDay, sellerBalance } from "./trips";
 
@@ -8,7 +9,7 @@ import { millDay, sellerBalance } from "./trips";
  * trip today, the day's trips, the stores bags can come from, and the
  * products with their price.
  */
-export async function sellersBoard(db: PrismaClient, companyId: string, date?: string | null, books: { mayPost: boolean } = { mayPost: false }) {
+export async function sellersBoard(db: PrismaClient, companyId: string, date?: string | null, books: { mayPost: boolean; mayPay?: boolean } = { mayPost: false }) {
   const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00.000Z`) : millDay();
   const sellers = await db.millingSeller.findMany({ where: { companyId }, orderBy: { createdAt: "asc" } });
   const [employees, trips, openTrips, stores, products, settings, rates, accounts, unposted] = await Promise.all([
@@ -24,7 +25,7 @@ export async function sellersBoard(db: PrismaClient, companyId: string, date?: s
     db.product.findMany({ where: { companyId, unit: "BAG" }, select: { id: true, code: true, name: true, standardPrice: true }, orderBy: { name: "asc" } }),
     getGeneralSettings(db, companyId),
     db.millingSellerRate.findMany({ where: { companyId } }),
-    books.mayPost ? db.bankAccount.findMany({ where: { companyId, isActive: true }, select: { id: true, name: true, kind: true, currency: true }, orderBy: { name: "asc" } }) : [],
+    books.mayPost || books.mayPay ? db.bankAccount.findMany({ where: { companyId, isActive: true }, select: { id: true, name: true, kind: true, currency: true }, orderBy: { name: "asc" } }) : [],
     // Money handed in that is not in Books yet.
     db.millingSellerPayment.findMany({ where: { companyId, postedAt: null }, orderBy: { receivedAt: "asc" }, take: 200 }),
   ]);
@@ -42,6 +43,7 @@ export async function sellersBoard(db: PrismaClient, companyId: string, date?: s
     freeAt.set(row.stockLocationId, entry);
   }
   const owedBySeller = await Promise.all(sellers.map((seller) => sellerBalance(db, companyId, seller.id)));
+  const commissionBySeller = await Promise.all(sellers.map((seller) => commissionDue(db, companyId, seller.id)));
   const nameOf = (sellerId: string) => employees.find((row) => row.id === sellers.find((seller) => seller.id === sellerId)?.employeeId)?.name ?? "";
   const productName = (id: string) => products.find((row) => row.id === id)?.name ?? "";
 
@@ -49,6 +51,7 @@ export async function sellersBoard(db: PrismaClient, companyId: string, date?: s
     day: day.toISOString().slice(0, 10),
     books: {
       mayPost: books.mayPost,
+      mayPay: books.mayPay ?? books.mayPost,
       // Cash accounts first: sellers hand in cash.
       accounts: [...accounts].sort((a, b) => Number(b.kind === "CASH") - Number(a.kind === "CASH")).map((row) => ({ id: row.id, name: row.name, currency: row.currency })),
       repayments: unposted
@@ -67,6 +70,7 @@ export async function sellersBoard(db: PrismaClient, companyId: string, date?: s
         number: employee?.employeeId ?? "",
         isActive: seller.isActive,
         owed: Number(owedBySeller[index]),
+        commissionDue: Number(commissionBySeller[index]),
         outOn: open ? { id: open.id, code: open.code, date: open.tripDate.toISOString().slice(0, 10) } : null,
       };
     }),
