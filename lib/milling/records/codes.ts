@@ -15,7 +15,8 @@ type CodeTable =
   | "millingBatch"
   | "millingPackRun"
   | "millingCustomerOrder"
-  | "millingDelivery";
+  | "millingDelivery"
+  | "millingSellerTrip";
 
 /**
  * The next code in a day's series, e.g. MI-261116-03. Read inside the

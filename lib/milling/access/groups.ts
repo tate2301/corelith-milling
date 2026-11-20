@@ -34,6 +34,7 @@ export const MILL_CAPABILITIES = [
   "delivery.manage",
   "delivery.own",
   "fuel.record",
+  "seller.manage",
   "settings.manage",
 ] as const;
 
@@ -76,7 +77,7 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "STORES",
     name: "Receiving and stores",
     description: "Receives maize, records weights, stores, moves and counts stock.",
-    capabilities: ["intake.record", "stock.move", "stock.count"],
+    capabilities: ["intake.record", "stock.move", "stock.count", "seller.manage"],
   },
   {
     code: "QUALITY",
@@ -94,7 +95,7 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "DISPATCH",
     name: "Dispatch officer",
     description: "Takes orders, plans deliveries, checks loading and dispatches.",
-    capabilities: ["order.manage", "delivery.manage"],
+    capabilities: ["order.manage", "delivery.manage", "seller.manage"],
   },
   {
     code: "DRIVER",

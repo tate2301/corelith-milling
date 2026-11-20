@@ -102,6 +102,8 @@ describe("the mill's settings", () => {
       defaultIntakeBagKg: 50,
       shiftHours: 8.5,
       shiftCrewSize: 7,
+      sellerMaxDiscount: 1,
+      sellerDiscountStep: 0.1,
     });
     const saved = await updateGeneralSettings(prisma, { companyId, actorId, body: { reconciliationTolerancePct: "1.5" } });
     expect(saved.reconciliationTolerancePct).toBe(1.5);

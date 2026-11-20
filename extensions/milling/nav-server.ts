@@ -22,6 +22,7 @@ async function badges(context: ExtensionNavContext): Promise<Record<string, stri
     ["/milling/production", can(held, "batch.approve") ? prisma.millingBatch.count({ where: { companyId, status: "AWAITING_DECISION" } }) : null],
     ["/milling/plan", can(held, "plan.approve") ? prisma.millingProductionOrder.count({ where: { companyId, status: "SUBMITTED" } }) : null],
     ["/milling/exceptions", can(held, "exception.decide") ? prisma.millingException.count({ where: { companyId, status: "OPEN" } }) : null],
+    ["/milling/sellers", can(held, "seller.manage") ? prisma.millingSellerTrip.count({ where: { companyId, status: "OUT" } }) : null],
     ["/milling/deliveries", can(held, "delivery.manage") ? prisma.millingDelivery.count({ where: { companyId, status: "DELIVERED" } }) : null],
   ];
   const result: Record<string, string> = {};

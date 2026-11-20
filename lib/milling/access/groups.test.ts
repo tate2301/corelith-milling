@@ -26,7 +26,7 @@ describe("the mill's permission groups", () => {
 
     const both = millAccessFor("CLERK", ["QUALITY", "STORES", "NOT_A_GROUP"]);
     expect(both.groups).toEqual(["STORES", "QUALITY"]);
-    expect(both.capabilities).toEqual(["intake.record", "stock.move", "stock.count", "qc.record", "qc.decide"]);
+    expect(both.capabilities).toEqual(["intake.record", "stock.move", "stock.count", "qc.record", "qc.decide", "seller.manage"]);
     expect(both.capabilities).not.toContain("exception.decide");
   });
 

@@ -32,6 +32,9 @@ model MillingSettings {
   shiftCrewSize               Int      @default(7)
   /// Planning: maize needed = planned output / (1 - this %), for cleaning losses and moisture.
   plannedLossPct              Decimal  @default(3) @db.Decimal(5, 2)
+  /// The most a seller may take off one bag, and the steps it comes in (10c up to $1).
+  sellerMaxDiscount           Decimal  @default(1) @db.Decimal(8, 2)
+  sellerDiscountStep          Decimal  @default(0.1) @db.Decimal(8, 2)
   updatedAt                   DateTime @updatedAt
   updatedById                 String?
 }
@@ -797,4 +800,124 @@ model MillingDeliveryLine {
 
   @@index([deliveryId])
   @@index([orderId])
+}
+
+/// An employee who takes packed bags out to sell and comes back to account for them.
+model MillingSeller {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// The core Employee.
+  employeeId  String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  createdById String
+
+  @@unique([companyId, employeeId])
+}
+
+/// What a seller earns on each product they sell: per bag, a share of what they sold it for, or both.
+model MillingSellerRate {
+  id               String   @id @default(uuid())
+  companyId        String
+  productId        String
+  commissionPerBag Decimal  @default(0) @db.Decimal(12, 2)
+  commissionPct    Decimal  @default(0) @db.Decimal(5, 2)
+  updatedAt        DateTime @updatedAt
+  updatedById      String?
+
+  @@unique([companyId, productId])
+}
+
+/// One seller's day out: the bags they took from a store, then what came back, what they sold and the cash.
+model MillingSellerTrip {
+  id               String    @id @default(uuid())
+  companyId        String
+  /// ST-YYMMDD-NN.
+  code             String
+  sellerId         String
+  /// The mill's day the bags went out. One trip a seller a day.
+  tripDate         DateTime  @db.Date
+  siteId           String
+  /// The store the bags came from, and the place they wait in while the seller is out.
+  fromLocationId   String
+  withSellersLocationId String
+  /// OUT, SETTLED or CANCELLED.
+  status           String    @default("OUT")
+  issuedById       String
+  issuedAt         DateTime  @default(now())
+  /// What the seller still owed when the bags went out; above nothing needs a manager's override.
+  owedAtIssue      Decimal   @default(0) @db.Decimal(12, 2)
+  overrideById     String?
+  overrideReason   String?
+  settledById      String?
+  settledAt        DateTime?
+  /// Bags sold at full price, before discounts.
+  grossAmount      Decimal?  @db.Decimal(12, 2)
+  discountAmount   Decimal?  @db.Decimal(12, 2)
+  /// What the seller owes for the trip: gross less discounts.
+  amountDue        Decimal?  @db.Decimal(12, 2)
+  cashReceived     Decimal?  @db.Decimal(12, 2)
+  /// Owed and not handed in. Above nothing, the seller cannot go out again until it is paid.
+  shortage         Decimal?  @db.Decimal(12, 2)
+  commissionAmount Decimal?  @db.Decimal(12, 2)
+  notes            String?
+  createdAt        DateTime  @default(now())
+
+  lines     MillingSellerTripLine[]
+  discounts MillingSellerDiscount[]
+
+  @@unique([companyId, code])
+  @@unique([companyId, sellerId, tripDate])
+  @@index([companyId, status])
+}
+
+/// Bags of one product from one lot on a trip.
+model MillingSellerTripLine {
+  id               String   @id @default(uuid())
+  tripId           String
+  productId        String
+  lotId            String
+  /// The reservation that keeps the bags for the trip while they are out.
+  reservationId    String?
+  bagsOut          Int
+  bagsBack         Int?
+  bagsSold         Int?
+  /// The product's price when the bags went out.
+  unitPrice        Decimal  @db.Decimal(12, 2)
+  commissionPerBag Decimal  @default(0) @db.Decimal(12, 2)
+  commissionPct    Decimal  @default(0) @db.Decimal(5, 2)
+
+  trip MillingSellerTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+/// Bags of a product the seller sold below price, and by how much a bag.
+model MillingSellerDiscount {
+  id        String  @id @default(uuid())
+  tripId    String
+  productId String
+  /// Taken off each bag, in the mill's steps (10c) up to its most ($1).
+  discount  Decimal @db.Decimal(8, 2)
+  bags      Int
+
+  trip MillingSellerTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+/// Money a seller handed in: at settlement, or later against what they owe.
+model MillingSellerPayment {
+  id           String   @id @default(uuid())
+  companyId    String
+  sellerId     String
+  tripId       String?
+  /// SETTLEMENT or REPAYMENT.
+  kind         String
+  amount       Decimal  @db.Decimal(12, 2)
+  receivedById String
+  receivedAt   DateTime @default(now())
+  notes        String?
+
+  @@index([companyId, sellerId])
 }

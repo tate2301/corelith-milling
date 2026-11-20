@@ -40,10 +40,15 @@ export type LotReason =
   | "COUNT_ADJUSTMENT"
   | "WEIGHT_CORRECTION"
   | "GATE_SALE"
+  | "SELLER_SALE"
   | "BIN_MOVE";
 
-/** Issues allowed from a lot on hold or rejected: getting rid of it. */
-const DISPOSALS: ReadonlySet<LotReason> = new Set(["QC_DISPOSAL", "RETURN_TO_SUPPLIER"]);
+/**
+ * Issues allowed from a lot on hold or rejected: getting rid of it, or
+ * recording bags a seller has already sold (they left while the lot was
+ * released; a later hold cannot unsell them, and the trace shows who has them).
+ */
+const DISPOSALS: ReadonlySet<LotReason> = new Set(["QC_DISPOSAL", "RETURN_TO_SUPPLIER", "SELLER_SALE"]);
 
 const dec = (value: Qty) => new Prisma.Decimal(value);
 
