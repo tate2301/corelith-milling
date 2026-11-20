@@ -1003,3 +1003,44 @@ model MillingCustomerTerms {
 
   @@unique([companyId, customerId])
 }
+
+/// What the mill held on the day it started (GL-B1): counted, then posted to stock and Books once.
+model MillingOpeningStock {
+  id          String    @id @default(uuid())
+  companyId   String
+  /// OS-YYMMDD-NN.
+  code        String
+  /// The day it counts as on the books.
+  asOf        DateTime  @db.Date
+  /// DRAFT, then POSTED.
+  status      String    @default("DRAFT")
+  createdById String
+  createdAt   DateTime  @default(now())
+  postedById  String?
+  postedAt    DateTime?
+
+  lines MillingOpeningStockLine[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+}
+
+/// One item counted at a place, at its cost.
+model MillingOpeningStockLine {
+  id              String   @id @default(uuid())
+  openingId       String
+  productId       String
+  stockLocationId String
+  quantity        Decimal  @db.Decimal(14, 3)
+  unitCost        Decimal  @db.Decimal(14, 4)
+  /// The lot it went into, once posted.
+  lotId           String?
+  /// The Books entry it posted, once posted.
+  journalEntryId  String?
+  updatedById     String
+  updatedAt       DateTime @updatedAt
+
+  opening MillingOpeningStock @relation(fields: [openingId], references: [id], onDelete: Cascade)
+
+  @@unique([openingId, productId, stockLocationId])
+}

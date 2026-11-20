@@ -23,7 +23,7 @@ describe("the milling vertical", () => {
     expect(getBundleDefinition("ADDON_MILLING")?.features).toEqual(["milling.home"]);
   });
 
-  it("is provisioned with the mill's modules and none of the shop, school or mine screens", () => {
+  it("is provisioned with the mill's modules and the gate till, and none of the school or mine screens", () => {
     expect(provisioned).toEqual(
       expect.arrayContaining([
         "milling.home",
@@ -35,7 +35,9 @@ describe("the milling vertical", () => {
         "crm.customers",
       ]),
     );
-    const stray = provisioned.filter((key) => /^(retail|schools|gold|portal)\./.test(key) || key.startsWith("ops."));
+    // Gate sales run on core's till; the shop's buying and promotions, schools, gold and the mine's capture do not.
+    expect(provisioned).toEqual(expect.arrayContaining(["retail.pos", "retail.catalog", "retail.shifts", "portal.pos"]));
+    const stray = provisioned.filter((key) => /^(schools|gold|portal\.schools)/.test(key) || ["retail.purchasing", "retail.promotions"].includes(key) || key.startsWith("ops."));
     expect(stray).toEqual([]);
   });
 
