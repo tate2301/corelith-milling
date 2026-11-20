@@ -41,6 +41,7 @@ import {
   splitChanges,
 } from "./model";
 import { SaveBar } from "./save-bar";
+import { useEmbeddedSettings } from "./settings-embedding";
 
 /**
  * SettingsFrame — every settings page (00-foundations 5.10).
@@ -167,13 +168,14 @@ type FrameExtras = {
   slots?: (values: Record<string, unknown>) => Record<string, React.ReactNode>;
 };
 
-export function SettingsFrame({ page: key, ...extras }: { page: string } & FrameExtras) {
-  const page = settingsPage(key);
+export function SettingsFrame({ page: key, definition, ...extras }: { page: string; definition?: SettingsPage } & FrameExtras) {
+  const page = definition ?? settingsPage(key);
   if (!page) throw new Error(`No settings page "${key}"`);
   return <Frame pageKey={key} page={page} {...extras} />;
 }
 
 function Frame({ pageKey, page, actions, slots }: { pageKey: string; page: SettingsPage } & FrameExtras) {
+  const embedded = useEmbeddedSettings();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
@@ -337,16 +339,17 @@ function Frame({ pageKey, page, actions, slots }: { pageKey: string; page: Setti
   };
 
   const canReadActivity = canRetailRoleDo(role, "retail.activity", "view");
-  const chrome = (
-    <PageChrome title={page.title}>
+  const headerActions = (
+    <>
       {typeof actions === "function"
         ? hydrated && query.data
           ? actions(values, { formId: formId(pageKey), changes, saving })
           : null
         : actions}
       {canReadActivity ? <Button onClick={() => setActivityOpen(true)}>Activity</Button> : null}
-    </PageChrome>
+    </>
   );
+  const chrome = embedded ? <div className="cx-sf-tools">{headerActions}</div> : <PageChrome title={page.title}>{headerActions}</PageChrome>;
 
   let body: React.ReactNode;
   if (!hydrated || query.isPending) {
@@ -426,8 +429,9 @@ function Frame({ pageKey, page, actions, slots }: { pageKey: string; page: Setti
 
   return (
     <>
-      {chrome}
-      <div className="cx-sf">
+      {!embedded ? chrome : null}
+      <div className={embedded ? "cx-sf cx-sf--embedded" : "cx-sf"}>
+        {embedded ? chrome : null}
         <div className="cx-sf-body">
           <div className="cx-sf-main">
             <div className="cx-sf-scroll">

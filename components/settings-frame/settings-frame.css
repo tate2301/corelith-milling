@@ -91,3 +91,17 @@
 .cx-sf-pager { display: flex; align-items: center; gap: 8px; padding-top: 14px; color: var(--ink-3); }
 .cx-sf-pager b { color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
 .cx-sf-pager span { flex: 1; }
+
+/* Reuse the original form, save bar and aside inside Mill settings. */
+.cx-sf.cx-sf--embedded {
+  height: auto;
+  width: 100%;
+  margin: 0;
+}
+.cx-sf--embedded .cx-sf-scroll { padding: 0 var(--space-5) var(--space-5) 0; }
+.cx-sf-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); padding-bottom: var(--space-4); }
+.cx-sf--embedded .cx-sf-bar { position: sticky; bottom: 0; height: auto; min-height: var(--space-10); padding: var(--space-3); flex-wrap: wrap; }
+.cx-sf--embedded .cx-sf-aside--under { margin: var(--space-5) 0 0; }
+@media (max-width: 1099px) {
+  .cx-sf--embedded .cx-sf-scroll { padding-right: 0; }
+}

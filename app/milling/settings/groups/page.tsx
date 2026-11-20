@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EmptyState } from "@corelithzw/react";
 
+import { SectionHeading } from "@/components/management/ui";
 import { MillSettingsShell } from "@/components/milling/settings-shell";
 import { useMillAccess } from "@/components/milling/use-mill-access";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -76,6 +77,7 @@ export default function MillGroupsPage() {
 
   return (
     <MillSettingsShell>
+      <SectionHeading variant="form" count={query.data ? members.length : undefined}>Groups and access</SectionHeading>
       {query.isError ? (
         <Alert variant="destructive">
           <AlertDescription>{getApiErrorMessage(query.error)}</AlertDescription>
