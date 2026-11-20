@@ -748,6 +748,8 @@ model MillingDelivery {
   code               String
   /// The core Equipment (category VEHICLE).
   vehicleId          String
+  /// The core CustomerRoute the trip runs, when it was planned from one.
+  routeId            String?
   /// The core User who drives; they record proof of delivery on their phone.
   driverId           String?
   destinationId      String?
@@ -776,6 +778,7 @@ model MillingDelivery {
   @@unique([companyId, code])
   @@index([companyId, status])
   @@index([driverId, status])
+  @@index([routeId])
 }
 
 /// Bags of one lot on a delivery for one order line, and what became of them.

@@ -71,6 +71,8 @@ describe("the milling vertical", () => {
     ]);
     const production = mill?.items.find((item) => item.label === "Production");
     expect(production?.kids?.map((kid) => kid.label)).toEqual(["Runs", "Plan", "Shifts", "Packing", "Downtime", "Generator log"]);
+    const despatch = mill?.items.find((item) => item.label === "Despatch");
+    expect(despatch?.kids?.map((kid) => kid.label)).toEqual(["Despatches", "Trips", "Routes", "Orders", "Sellers"]);
 
     // The mill comes first, then the shared modules under the canvas's names.
     const named = groups.filter((group) => group.id !== "top").map((group) => group.label);

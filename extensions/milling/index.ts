@@ -160,6 +160,8 @@ export const milling: CorelithExtension = {
         href: "/milling/deliveries",
         kids: [
           { id: "milling.deliveries", label: "Despatches", icon: "dispatch", href: "/milling/deliveries" },
+          { id: "milling.trips", label: "Trips", icon: "activity", href: "/milling/trips" },
+          { id: "milling.routes", label: "Routes", icon: "link", href: "/milling/routes" },
           { id: "milling.orders", label: "Orders", icon: "purchase-order", href: "/milling/orders" },
           { id: "milling.sellers", label: "Sellers", icon: "employee", href: "/milling/sellers" },
         ],
