@@ -199,6 +199,7 @@ export const milling: CorelithExtension = {
           { id: "milling.s-destinations", label: "Destinations", icon: "link", href: "/milling/settings/destinations" },
           { id: "milling.s-duties", label: "Shift duties", icon: "shift", href: "/milling/settings/duties" },
           { id: "milling.s-groups", label: "Who does what", icon: "people", href: "/milling/settings/groups" },
+          { id: "milling.s-shop", label: "Gate sales shop", icon: "receipt", href: "/milling/settings/shop" },
           { id: "milling.s-sites", label: "Sites and sections", icon: "site", href: "/preferences/organization/sites", management: "sites" },
           { id: "milling.s-approvals", label: "Approvals", icon: "approval", href: "/retail/manage/approvals", management: "approvals" },
           { id: "milling.s-numbering", label: "Numbering", icon: "numbering", href: "/books/settings/numbering", management: "bnum" },
