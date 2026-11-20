@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState } from "@corelithzw/react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
 
@@ -76,6 +77,8 @@ type Trip = {
   cashReceived: number | null;
   shortage: number | null;
   commissionAmount: number | null;
+  invoiceId: string | null;
+  inBooks: boolean;
 };
 type Product = {
   id: string;
@@ -97,6 +100,11 @@ type Board = {
     free: Record<string, number>;
   }>;
   products: Product[];
+  books: {
+    mayPost: boolean;
+    accounts: Array<{ id: string; name: string; currency: string }>;
+    repayments: Array<{ id: string; sellerId: string; seller: string; amount: number; receivedAt: string }>;
+  };
 };
 
 const money = (value: number | null | undefined) =>
@@ -258,6 +266,11 @@ function TodayTab({ board, canManage }: { board: Board; canManage: boolean }) {
                     </Button>
                   </div>
                 ) : null}
+                {trip.status === "SETTLED" && !trip.inBooks && board.books.mayPost ? (
+                  <div className="pt-1">
+                    <PostToBooks board={board} label="Post to Books" title={`Post ${trip.code} to Books`} url={`/api/milling/sellers/trips/${trip.id}/books`} detail={`An invoice to ${trip.seller} for the bags sold (${money(trip.amountDue)}), and the ${money(trip.cashReceived)} handed in against it. What is not paid stays open on their account in Books.`} />
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -343,6 +356,15 @@ function TodayTab({ board, canManage }: { board: Board; canManage: boolean }) {
                               </Button>
                             </>
                           ) : null}
+                          {trip.status === "SETTLED" && trip.inBooks && trip.invoiceId ? (
+                            <Link className="text-sm underline" href={`/books/invoices/${trip.invoiceId}`}>
+                              In Books
+                            </Link>
+                          ) : null}
+                          {trip.status === "SETTLED" && !trip.inBooks && board.books.mayPost ? (
+                            <PostToBooks board={board} label="Post to Books" title={`Post ${trip.code} to Books`} url={`/api/milling/sellers/trips/${trip.id}/books`} detail={`An invoice to ${trip.seller} for the bags sold (${money(trip.amountDue)}), and the ${money(trip.cashReceived)} handed in against it. What is not paid stays open on their account in Books.`} />
+                          ) : null}
+                          {trip.status === "SETTLED" && !trip.inBooks && !board.books.mayPost ? <span className="text-xs text-muted-foreground">Not in Books yet</span> : null}
                         </TableCell>
                       </TableRow>
                       {open === trip.id ? (
@@ -931,6 +953,23 @@ function SellersTab({
         {canManage ? <AddSeller board={board} /> : null}
       </div>
       <FormError error={retire.error} />
+      {board.books.repayments.length ? (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <p className="text-sm font-medium">Repayments not in Books yet</p>
+          <ul className="divide-y divide-border">
+            {board.books.repayments.map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                <span>
+                  {row.seller} · <span className="font-mono">{money(row.amount)}</span> · {formatWhen(row.receivedAt)}
+                </span>
+                {board.books.mayPost ? (
+                  <PostToBooks board={board} label="Post to Books" title={`Post ${row.seller}'s repayment`} url={`/api/milling/sellers/payments/${row.id}/books`} detail={`${money(row.amount)} into Books, against ${row.seller}'s oldest open invoices.`} />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {!board.sellers.length ? (
         <EmptyState
           title="No sellers yet"
@@ -1289,5 +1328,43 @@ function EditRate({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Post to Books: choose the money account the cash went into. Books issues the invoice and records the receipt under its own rules. */
+function PostToBooks({ board, label, title, url, detail }: { board: Board; label: string; title: string; url: string; detail: string }) {
+  const [open, setOpen] = useState(false);
+  const [bankAccountId, setAccount] = useState(board.books.accounts[0]?.id ?? "");
+  const save = useMillPost({ done: "Posted to Books", onDone: () => setOpen(false) });
+  return (
+    <>
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{detail}</DialogDescription>
+          </DialogHeader>
+          {board.books.accounts.length ? (
+            <Field id="pb-account" label="Cash went into">
+              <MillSelect id="pb-account" value={bankAccountId} onChange={setAccount} options={board.books.accounts.map((row) => ({ value: row.id, label: `${row.name} (${row.currency})` }))} />
+            </Field>
+          ) : (
+            <p className="text-sm text-muted-foreground">Books has no money account yet. Add one in Books, under Bank &amp; cash.</p>
+          )}
+          <FormError error={save.error} />
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={save.pending || !bankAccountId} onClick={() => save.post(url, { bankAccountId })}>
+              Post
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -8,10 +8,10 @@ import { millDay, sellerBalance } from "./trips";
  * trip today, the day's trips, the stores bags can come from, and the
  * products with their price.
  */
-export async function sellersBoard(db: PrismaClient, companyId: string, date?: string | null) {
+export async function sellersBoard(db: PrismaClient, companyId: string, date?: string | null, books: { mayPost: boolean } = { mayPost: false }) {
   const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00.000Z`) : millDay();
   const sellers = await db.millingSeller.findMany({ where: { companyId }, orderBy: { createdAt: "asc" } });
-  const [employees, trips, openTrips, stores, products, settings, rates] = await Promise.all([
+  const [employees, trips, openTrips, stores, products, settings, rates, accounts, unposted] = await Promise.all([
     db.employee.findMany({ where: { companyId, id: { in: sellers.map((row) => row.employeeId) } }, select: { id: true, name: true, employeeId: true, userId: true } }),
     // The day's trips, and any still out from an earlier day: they have to be settled too.
     db.millingSellerTrip.findMany({ where: { companyId, OR: [{ tripDate: day }, { status: "OUT" }] }, include: { lines: true, discounts: true }, orderBy: { code: "asc" } }),
@@ -24,6 +24,9 @@ export async function sellersBoard(db: PrismaClient, companyId: string, date?: s
     db.product.findMany({ where: { companyId, unit: "BAG" }, select: { id: true, code: true, name: true, standardPrice: true }, orderBy: { name: "asc" } }),
     getGeneralSettings(db, companyId),
     db.millingSellerRate.findMany({ where: { companyId } }),
+    books.mayPost ? db.bankAccount.findMany({ where: { companyId, isActive: true }, select: { id: true, name: true, kind: true, currency: true }, orderBy: { name: "asc" } }) : [],
+    // Money handed in that is not in Books yet.
+    db.millingSellerPayment.findMany({ where: { companyId, postedAt: null }, orderBy: { receivedAt: "asc" }, take: 200 }),
   ]);
   // Where released bags are free to take, product by product.
   const freeBalances = await db.millingLotBalance.findMany({
@@ -44,6 +47,14 @@ export async function sellersBoard(db: PrismaClient, companyId: string, date?: s
 
   return {
     day: day.toISOString().slice(0, 10),
+    books: {
+      mayPost: books.mayPost,
+      // Cash accounts first: sellers hand in cash.
+      accounts: [...accounts].sort((a, b) => Number(b.kind === "CASH") - Number(a.kind === "CASH")).map((row) => ({ id: row.id, name: row.name, currency: row.currency })),
+      repayments: unposted
+        .filter((row) => row.kind === "REPAYMENT")
+        .map((row) => ({ id: row.id, sellerId: row.sellerId, seller: nameOf(row.sellerId), amount: Number(row.amount), receivedAt: row.receivedAt })),
+    },
     rules: { maxDiscount: settings.sellerMaxDiscount, step: settings.sellerDiscountStep },
     sellers: sellers.map((seller, index) => {
       const employee = employees.find((row) => row.id === seller.employeeId);
@@ -87,6 +98,12 @@ export async function sellersBoard(db: PrismaClient, companyId: string, date?: s
         cashReceived: trip.cashReceived === null ? null : Number(trip.cashReceived),
         shortage: trip.shortage === null ? null : Number(trip.shortage),
         commissionAmount: trip.commissionAmount === null ? null : Number(trip.commissionAmount),
+        invoiceId: trip.invoiceId,
+        // In Books once the invoice is issued (when anything was sold) and the cash handed in is posted.
+        inBooks:
+          trip.status === "SETTLED" &&
+          (trip.invoiceId !== null || Number(trip.amountDue ?? 0) === 0) &&
+          !unposted.some((row) => row.tripId === trip.id),
       };
     }),
     // Only places holding released bags, the fullest first: that is where a seller collects.

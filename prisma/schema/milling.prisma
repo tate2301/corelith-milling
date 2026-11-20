@@ -808,6 +808,8 @@ model MillingSeller {
   companyId   String
   /// The core Employee.
   employeeId  String
+  /// The seller as a Books customer: their trips are invoiced to it, so what they owe shows in Books' debtors.
+  customerId  String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   createdById String
@@ -860,6 +862,8 @@ model MillingSellerTrip {
   /// Owed and not handed in. Above nothing, the seller cannot go out again until it is paid.
   shortage         Decimal?  @db.Decimal(12, 2)
   commissionAmount Decimal?  @db.Decimal(12, 2)
+  /// The Books sales invoice for the bags sold, once posted.
+  invoiceId        String?
   notes            String?
   createdAt        DateTime  @default(now())
 
@@ -918,6 +922,9 @@ model MillingSellerPayment {
   receivedById String
   receivedAt   DateTime @default(now())
   notes        String?
+  /// When the money went into Books, and the receipt numbers it made there.
+  postedAt     DateTime?
+  booksReference String?
 
   @@index([companyId, sellerId])
 }
