@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { PageChrome } from "@/components/layout/page-chrome";
-import { formatKg, formatWhen } from "@/components/milling/mill-ui";
-import { targetHref } from "@/components/milling/targets";
+import { formatKg } from "@/components/milling/mill-ui";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchJson } from "@/lib/api-client";
 
 type Dashboard = {
@@ -19,7 +19,16 @@ type Dashboard = {
   machines: { down: Array<{ id?: string; equipmentCode?: string; name?: string; availability: string }>; hoursStoppedToday: number };
   deliveries: { planned: number; onTheRoad: number; toReconcile: number };
   exceptions: Array<{ id: string; code: string; title: string; targetType: string; targetId: string; createdAt: string }>;
+  waiting: Array<{ key: string; code: string; what: string; href: string; sentBy: string | null; sentAt: string; quantity: string | null }>;
+  yesterday: {
+    day: string;
+    rows: Array<{ siteId: string; site: string; maizeKg: number | null; mealKg: number | null; downtimeHours: number | null; bagsOut: number | null }>;
+    total: { maizeKg: number; mealKg: number; downtimeHours: number; bagsOut: number };
+  };
 };
+
+const n = (value: number | null, digits = 0) => (value === null || value === 0 ? "—" : value.toLocaleString("en-ZW", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+const sent = (value: string) => new Date(value).toLocaleString("en-ZW", { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
 function Tile({ title, href, children }: { title: string; href: string; children: React.ReactNode }) {
   return (
@@ -33,43 +42,121 @@ function Tile({ title, href, children }: { title: string; href: string; children
 const Figure = ({ children }: { children: React.ReactNode }) => <div className="font-mono text-xl">{children}</div>;
 const Note = ({ children }: { children: React.ReactNode }) => <div className="text-sm text-muted-foreground">{children}</div>;
 
-/** The mill now: who is on, what is running, what is held, what is down, what is waiting for a decision. */
+/**
+ * Overview (HM-A1): what is waiting for this person's decision, then
+ * yesterday across the sites, then the mill now: who is on, what is running,
+ * held, down and out on the road. Each waiting row opens its record, where
+ * the decision is taken with its own checks.
+ */
 export default function MillingHomePage() {
   const query = useQuery({ queryKey: ["milling", "dashboard"], queryFn: () => fetchJson<Dashboard>("/api/milling/dashboard"), refetchInterval: 60_000 });
   const data = query.data;
   return (
     <>
-      <PageChrome title="The mill" />
+      <PageChrome title="Overview" />
       <div className="space-y-6 px-4 py-4">
         {query.isPending || !data ? (
           <Skeleton className="h-96 w-full" />
         ) : (
           <>
-            {data.exceptions.length ? (
-              <section className="space-y-2 rounded-md border p-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold">Waiting for a decision</h2>
-                  <Link className="text-sm underline" href="/milling/exceptions">
-                    All exceptions
-                  </Link>
-                </div>
-                <ul className="space-y-1 text-sm">
-                  {data.exceptions.map((exception) => (
-                    <li key={exception.id}>
-                      <span className="font-mono">{exception.code}</span>{" "}
-                      {targetHref(exception.targetType, exception.targetId) ? (
-                        <Link className="underline" href={targetHref(exception.targetType, exception.targetId)!}>
-                          {exception.title}
-                        </Link>
-                      ) : (
-                        exception.title
-                      )}{" "}
-                      <span className="text-muted-foreground">· {formatWhen(exception.createdAt)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
+            <section className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-base font-semibold">Waiting for you</h2>
+                <span className="text-sm text-muted-foreground">
+                  {data.waiting.length} {data.waiting.length === 1 ? "record" : "records"}
+                </span>
+              </div>
+              {!data.waiting.length ? (
+                <p className="text-sm text-muted-foreground">Nothing is waiting for your decision.</p>
+              ) : (
+                <>
+                  <ul className="divide-y divide-border rounded-md border border-border md:hidden">
+                    {data.waiting.map((row) => (
+                      <li key={row.key} className="space-y-1 p-3">
+                        <div className="flex justify-between gap-2">
+                          <Link className="font-mono underline" href={row.href}>
+                            {row.code}
+                          </Link>
+                          <span className="font-mono text-sm">{row.quantity ?? ""}</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {row.what}
+                          {row.sentBy ? ` · ${row.sentBy}` : ""} · {sent(row.sentAt)}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="hidden md:block">
+                    <Table hideControlsWhenSinglePage>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Record</TableHead>
+                          <TableHead>What</TableHead>
+                          <TableHead>Sent by</TableHead>
+                          <TableHead className="text-right">Sent</TableHead>
+                          <TableHead className="text-right">Quantity</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.waiting.map((row) => (
+                          <TableRow key={row.key}>
+                            <TableCell className="font-mono">
+                              <Link className="underline" href={row.href}>
+                                {row.code}
+                              </Link>
+                            </TableCell>
+                            <TableCell>{row.what}</TableCell>
+                            <TableCell>{row.sentBy ?? "—"}</TableCell>
+                            <TableCell className="text-right font-mono">{sent(row.sentAt)}</TableCell>
+                            <TableCell className="text-right font-mono">{row.quantity ?? "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </section>
+
+            <section className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-base font-semibold">Yesterday, all sites</h2>
+                <span className="text-sm text-muted-foreground">{new Date(`${data.yesterday.day}T00:00:00`).toLocaleDateString("en-ZW", { weekday: "long", day: "numeric", month: "long" })}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <Table hideControlsWhenSinglePage>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Site</TableHead>
+                      <TableHead className="text-right">Maize received kg</TableHead>
+                      <TableHead className="text-right">Meal kg</TableHead>
+                      <TableHead className="text-right">Downtime hours</TableHead>
+                      <TableHead className="text-right">Bags out</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.yesterday.rows.map((row) => (
+                      <TableRow key={row.siteId}>
+                        <TableCell>{row.site}</TableCell>
+                        <TableCell className="text-right font-mono">{n(row.maizeKg, 1)}</TableCell>
+                        <TableCell className="text-right font-mono">{n(row.mealKg)}</TableCell>
+                        <TableCell className="text-right font-mono">{row.downtimeHours === null ? "—" : row.downtimeHours.toFixed(1)}</TableCell>
+                        <TableCell className="text-right font-mono">{n(row.bagsOut)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2 border-border font-medium">
+                      <TableCell>{data.yesterday.rows.length === 1 ? "Total" : `All ${data.yesterday.rows.length} sites`}</TableCell>
+                      <TableCell className="text-right font-mono">{n(data.yesterday.total.maizeKg, 1)}</TableCell>
+                      <TableCell className="text-right font-mono">{n(data.yesterday.total.mealKg)}</TableCell>
+                      <TableCell className="text-right font-mono">{data.yesterday.total.downtimeHours.toFixed(1)}</TableCell>
+                      <TableCell className="text-right font-mono">{n(data.yesterday.total.bagsOut)}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </section>
+
+            <h2 className="text-base font-semibold">Now</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Tile title="On shift" href={data.shift ? `/milling/shifts/${data.shift.id}` : "/milling/shifts"}>
                 {data.shift ? (
