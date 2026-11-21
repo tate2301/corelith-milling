@@ -51,10 +51,10 @@ export default function MillMaintenancePage() {
             <SectionTab to="/milling/maintenance" active={tab === "board"}>
               Availability
             </SectionTab>
-            <SectionTab to="/milling/maintenance?tab=stops" active={tab === "stops"}>
+            <SectionTab to="/milling/downtime" active={false}>
               Stops
             </SectionTab>
-            <SectionTab to="/milling/maintenance?tab=generator" active={tab === "generator"}>
+            <SectionTab to="/milling/generator" active={false}>
               Generator
             </SectionTab>
           </SectionTabs>

@@ -3,6 +3,7 @@ import type { SheetKind } from "@/lib/workspace/sheet-kind";
 import { CUSTOMER_SHEETS } from "./customers";
 import { DESPATCH_SHEETS } from "./despatch";
 import { EXCEPTION_SHEETS } from "./exceptions";
+import { MACHINE_SHEETS } from "./machines";
 import { PLAN_SHEETS } from "./plans";
 import { PRODUCTION_SHEETS } from "./production";
 
@@ -16,4 +17,5 @@ export const MILL_SHEETS: Readonly<Record<string, SheetKind>> = {
   ...DESPATCH_SHEETS,
   ...PLAN_SHEETS,
   ...CUSTOMER_SHEETS,
+  ...MACHINE_SHEETS,
 };

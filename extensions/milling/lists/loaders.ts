@@ -471,6 +471,84 @@ const visits: ReportLoader = {
   },
 };
 
+const STOP_KIND: Record<string, string> = { BREAKDOWN: "Breakdown", POWER: "Power", MATERIAL: "No maize", PLANNED: "Planned", OTHER: "Other" };
+
+async function machineNames(companyId: string, ids: Array<string | null>) {
+  const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  const rows = wanted.length ? await prisma.equipment.findMany({ where: { id: { in: wanted }, site: { companyId } }, select: { id: true, name: true } }) : [];
+  return new Map(rows.map((row) => [row.id, row.name]));
+}
+
+/** Production › Downtime: every stop, newest first; an open one runs to now. */
+const downtime: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingDowntime.findMany({ where: { companyId: ctx.companyId }, orderBy: { startedAt: "desc" }, take: 5000 });
+    const [machines, runs] = await Promise.all([
+      machineNames(ctx.companyId, rows.map((row) => row.equipmentId)),
+      prisma.millingBatch.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.batchId).filter((id): id is string => Boolean(id)) } }, select: { id: true, code: true } }),
+    ]);
+    const now = Date.now();
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          machine: row.equipmentId ? (machines.get(row.equipmentId) ?? null) : "Whole mill",
+          cause: row.cause,
+          category: STOP_KIND[row.category] ?? row.category,
+          runId: row.batchId,
+          run: runs.find((run) => run.id === row.batchId)?.code ?? null,
+          stateKey: row.endedAt ? "CLOSED" : "OPEN",
+          state: row.endedAt ? "Closed" : "Stopped",
+          end: row.endedAt ? null : "End",
+          from: dayAndTime(row.startedAt),
+          to: row.endedAt ? dayAndTime(row.endedAt) : null,
+          hours: Math.round((((row.endedAt?.getTime() ?? now) - row.startedAt.getTime()) / 3_600_000) * 10) / 10,
+          startedAt: row.startedAt.toISOString(),
+          date: isoDay(row.startedAt),
+        }),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await prisma.millingDowntime.findMany({ where: { companyId: ctx.companyId }, select: { equipmentId: true }, distinct: ["equipmentId"] });
+    const machines = await machineNames(ctx.companyId, rows.map((row) => row.equipmentId));
+    return { machine: distinct([...machines.values(), ...(rows.some((row) => !row.equipmentId) ? ["Whole mill"] : [])]) };
+  },
+};
+
+/** Production › Generator log: every generator run, newest first. */
+const generator: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingGeneratorRun.findMany({ where: { companyId: ctx.companyId }, orderBy: { startedAt: "desc" }, take: 5000 });
+    const machines = await machineNames(ctx.companyId, rows.map((row) => row.equipmentId));
+    return result(
+      rows.map((row): ReportRow => {
+        const hours = Math.round(((row.endedAt.getTime() - row.startedAt.getTime()) / 3_600_000) * 10) / 10;
+        const litres = Number(row.litres);
+        return {
+          id: row.id,
+          generator: row.equipmentId ? (machines.get(row.equipmentId) ?? null) : "Generator",
+          from: dayAndTime(row.startedAt),
+          to: dayAndTime(row.endedAt),
+          meterFrom: row.meterStart === null ? null : Number(row.meterStart),
+          meterTo: row.meterEnd === null ? null : Number(row.meterEnd),
+          hours,
+          litres,
+          perHour: hours > 0 ? Math.round((litres / hours) * 10) / 10 : null,
+          reason: row.reason,
+          startedAt: row.startedAt.toISOString(),
+          date: isoDay(row.startedAt),
+        };
+      }),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await prisma.millingGeneratorRun.findMany({ where: { companyId: ctx.companyId }, select: { equipmentId: true }, distinct: ["equipmentId"] });
+    const machines = await machineNames(ctx.companyId, rows.map((row) => row.equipmentId));
+    return { generator: distinct([...machines.values()]) };
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -485,4 +563,6 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-shift-list": shifts,
   "milling-customer-list": customers,
   "milling-visit-list": visits,
+  "milling-downtime-list": downtime,
+  "milling-generator-list": generator,
 };
