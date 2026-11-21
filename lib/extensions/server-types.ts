@@ -17,6 +17,18 @@ export type ExtensionPersona = {
   phone?: string[];
 };
 
+/**
+ * An extension's own permissions, for the shared list and record frames: a
+ * list action, column or primary may require `["ext:<id>", "<action>"]`
+ * ("ext:milling", "intake.approve"), and this says whether the person holds
+ * it. Read once per request; anything it does not know is refused.
+ */
+export interface ExtensionGrantsServer {
+  /** The extension's id, as in `extensions/index.ts`. */
+  id: string;
+  grants: (context: ExtensionNavContext) => Promise<(action: string) => boolean>;
+}
+
 export interface ExtensionNavServer {
   /** The extension's id, as in `extensions/index.ts`. */
   id: string;

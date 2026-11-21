@@ -10,7 +10,12 @@ import type { Ask } from "@/lib/workspace/ask";
  * the viewer's role cannot do (the server checks again).
  */
 
-export type Grant = [RetailResource, RetailAction];
+/**
+ * A grant from the retail matrix, or an extension's own (`["ext:milling",
+ * "intake.approve"]`), which the page answers through RecordFrame's
+ * `extensionCan`; without it an extension grant is not held.
+ */
+export type Grant = [RetailResource, RetailAction] | [`ext:${string}`, string];
 
 /**
  * What an action does: open a sheet over the record (with the record's id

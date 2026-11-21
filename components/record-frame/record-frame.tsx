@@ -27,6 +27,10 @@ import { RecordActions } from "./record-header";
 import { RecordStrip } from "./record-strip";
 import { RecordTabs } from "./record-tabs";
 
+function isExtensionGrant(grant: Grant): grant is [`ext:${string}`, string] {
+  return grant[0].startsWith("ext:");
+}
+
 /**
  * RecordFrame (00-foundations 5.6): every record drawn from one kind.
  *
@@ -43,11 +47,17 @@ export function RecordFrame<R>({
   kind,
   id,
   onEvent,
+  extensionCan,
   children,
 }: {
   kind: RecordKind<R>;
   id: string;
   onEvent?: (event: string, record: R) => void;
+  /**
+   * An extension's record answers its own grants (`["ext:milling", "intake.approve"]`)
+   * from the person's groups in it. The server checks every request again.
+   */
+  extensionCan?: (grant: [`ext:${string}`, string]) => boolean;
   children?: React.ReactNode;
 }) {
   const router = useRouter();
@@ -69,8 +79,12 @@ export function RecordFrame<R>({
 
   const user = session?.user as { id?: string; role?: string; supportSessionId?: string | null } | undefined;
   const can = React.useCallback(
-    (grant: Grant) => Boolean(user) && canRetailSessionDo({ user: { role: user?.role, supportSessionId: user?.supportSessionId } }, grant[0], grant[1]),
-    [user],
+    (grant: Grant) => {
+      if (!user) return false;
+      if (isExtensionGrant(grant)) return extensionCan ? extensionCan(grant) : false;
+      return canRetailSessionDo({ user: { role: user.role, supportSessionId: user.supportSessionId } }, grant[0], grant[1]);
+    },
+    [user, extensionCan],
   );
   const allowed = React.useCallback(
     (action: RecordAction) => action.requires.length === 0 || action.requires.some((grant) => can(grant)),
