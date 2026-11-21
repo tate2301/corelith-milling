@@ -1,5 +1,6 @@
 import type { CorelithExtension } from "@/lib/extensions/types";
 
+import { MILLING_LISTS } from "./lists";
 import { MILLING_REPORTS } from "./reports";
 
 /**
@@ -91,7 +92,7 @@ export const milling: CorelithExtension = {
       ],
     },
   ],
-  reports: MILLING_REPORTS,
+  reports: [...MILLING_REPORTS, ...MILLING_LISTS],
   product: {
     label: "Milling operations",
     workspaceLabel: "The mill",

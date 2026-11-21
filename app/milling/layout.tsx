@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 
+import { MillSheetHost } from "@/components/milling/mill-sheet-host";
 import { NoMillAccess } from "@/components/milling/no-access";
 import { useMillAccess } from "@/components/milling/use-mill-access";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,5 +27,10 @@ export default function MillLayout({ children }: { children: ReactNode }) {
   if (!mounted) return <Skeleton className="m-4 h-96" />;
   // Hiding rows is never the check (NV03): the APIs refuse on their own. This page only says so plainly.
   if (access.data && !access.data.canView) return <NoMillAccess askFor={(access.data as { askFor?: string[] }).askFor ?? []} />;
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <MillSheetHost />
+    </>
+  );
 }
