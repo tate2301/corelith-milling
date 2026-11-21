@@ -25,7 +25,6 @@ import {
   ZERO,
 } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
-import { readExtensionEarnings } from "@/lib/extensions/payroll-server";
 import { calculateRuleAmount } from "@/lib/hr/payroll/rules";
 import { bandedOvertimePay, type OvertimeShift } from "@/lib/hr/payroll/overtime-bands";
 import {
@@ -369,14 +368,6 @@ export async function assembleSalaryRun(
     db,
   );
 
-  // What a trade adds to pay for the period, such as a seller's commission (`extensions/payroll-server.ts`).
-  const extensionEarnings = await readExtensionEarnings({
-    companyId: input.companyId,
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
-    employeeIds,
-  });
-
   const penaltiesByEmployee = await penaltiesOwedByEmployee(
     {
       companyId: input.companyId,
@@ -484,7 +475,7 @@ export async function assembleSalaryRun(
   );
 
   const lines: AssembledLine[] = [];
-  const warnings: string[] = [...extensionEarnings.warnings];
+  const warnings: string[] = [];
 
   for (const employee of employees) {
     const profile = profileByEmployee.get(employee.id);
@@ -527,18 +518,6 @@ export async function assembleSalaryRun(
         isTaxable: true,
         kind: "VARIABLE",
       });
-    }
-
-    // An extension's earning is paid in the currency it is in, as a penalty is
-    // taken: one in another currency is left for HR, and said, not converted.
-    for (const extra of extensionEarnings.byEmployee.get(employee.id) ?? []) {
-      if (extra.currency !== currency) {
-        warnings.push(
-          `${employee.name} (${employee.employeeId}): "${extra.name}" is in ${extra.currency} and their pay is in ${currency}, so it was not added.`,
-        );
-        continue;
-      }
-      earnings.push({ name: extra.name, amount: extra.amount, isTaxable: extra.taxable, kind: "VARIABLE" });
     }
 
     const preTaxDeductions: EngineDeduction[] = [];

@@ -12,13 +12,7 @@
  * salary path, and why the salary cases moved here.
  */
 
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-
-import type { ExtensionPayrollServer } from "@/lib/extensions/server-types";
-
-// Empty unless a test registers a trade's earnings (`extensions/payroll-server.ts`).
-const payrollServers = vi.hoisted(() => [] as ExtensionPayrollServer[]);
-vi.mock("@/extensions/payroll-server", () => ({ registeredExtensionPayroll: payrollServers }));
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 
 import { prisma } from "@/lib/prisma";
 import { seedZimbabweStatutoryPack } from "@/lib/hr/statutory/zimbabwe-pack";
@@ -835,37 +829,5 @@ describe("disciplinary penalties HR marked deducted come off the period's net pa
     const result = await run({ employeeScopeIds: [adaId] });
     expect(result.lines[0].payroll.slices[0].netAmount.toString()).toBe("755.16");
     expect(result.warnings).toContainEqual(expect.stringContaining('"Lost radio" is in ZWG'));
-  });
-});
-
-describe("earnings a trade adds to pay", () => {
-  afterEach(() => {
-    payrollServers.length = 0;
-  });
-
-  it("adds an extension's earning as taxable pay, in the pay's currency only, and survives a failing extension", async () => {
-    const asked: Array<{ start: string; end: string }> = [];
-    payrollServers.push(
-      {
-        id: "trade",
-        earnings: async (context) => {
-          asked.push({ start: context.periodStart.toISOString(), end: context.periodEnd.toISOString() });
-          return [
-            { employeeId: adaId, name: "Seller commission", amount: 120, currency: "USD" },
-            { employeeId: adaId, name: "Bonus in ZWG", amount: 50, currency: "ZWG" },
-            { employeeId: "someone-else", name: "Not in the run", amount: 999, currency: "USD" },
-          ];
-        },
-      },
-      { id: "broken", earnings: async () => { throw new Error("down"); } },
-    );
-    const result = await run({ employeeScopeIds: [adaId] });
-    expect(asked).toEqual([{ start: PERIOD_START.toISOString(), end: PERIOD_END.toISOString() }]);
-    const slice = result.lines[0].payroll.slices[0];
-    expect(slice.components.find((c) => c.name === "Seller commission")?.amount.toString()).toBe("120");
-    expect(slice.grossAmount.toString()).toBe("1120");
-    expect(slice.components.find((c) => c.name === "Bonus in ZWG")).toBeUndefined();
-    expect(result.warnings.some((w) => w.includes("Bonus in ZWG") && w.includes("not added"))).toBe(true);
-    expect(result.warnings.some((w) => w.includes("broken"))).toBe(true);
   });
 });

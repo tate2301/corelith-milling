@@ -61,7 +61,7 @@ Moving the fork's `stable` deploys every cell built from it.
 These are the only paths a fork may change (enforced by `boundary-lib.mjs`):
 
 - `FORK.md`
-- `extensions/index.ts`, `extensions/server.ts`, `extensions/nav-server.ts` and `extensions/payroll-server.ts`
+- `extensions/index.ts`, `extensions/server.ts` and `extensions/nav-server.ts`
 - `extensions/<flavour>/**`
 - `lib/<flavour>/**`
 - `app/<flavour>/**`
@@ -101,7 +101,6 @@ load, so gating and provisioning treat it like a core vertical:
 | `nav.order` / `nav.labels` | while the tenant runs its product: the order of the sidebar's groups, core's and its own mixed, and the trade's words for core's groups and rows | ids of groups and rows that are drawn; words only, never what a row opens |
 | `management` on a row | a row that opens a Management row by id (Sites, Numbering), drawn with ↗, shown exactly when Management shows that row | the address must be that row's |
 | `registeredExtensionNav` in `extensions/nav-server.ts` | server-only: counts on its rows (`badges`), and a person's start page and phone bar (`persona`), served at `/api/extensions/nav` and used by the root redirect | counts only on its own addresses; a start page the person may not open, or a phone row that is not drawn, is dropped |
-| `registeredExtensionPayroll` in `extensions/payroll-server.ts` | server-only: earnings for a pay period, by employee (`earnings`), such as commission; read each time a salary run is assembled and added as variable pay | only the run's employees and amounts above nothing; an earning in another currency than the pay is left out with a warning; a failing extension adds nothing and is reported |
 | `product` | `VERTICAL_PRODUCT_BUNDLES` as `ext.<flavour>`; a GENERAL workspace holding any `<flavour>.` feature runs it (label above the sidebar, home) | home under `/<flavour>` |
 | `reports` | `REPORT_DEFINITIONS`, readable only with their feature | key `<flavour>-<name>`, `featureKey` its own, page under `/<flavour>` |
 | loaders in `extensions/server.ts` | the report loaders (server-only, may query) | same key as a report it declares; never a core key |
