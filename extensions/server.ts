@@ -1,3 +1,4 @@
+import type { ExtensionGrantsServer } from "@/lib/extensions/server-types";
 import type { ReportLoader } from "@/lib/reports/types";
 
 /**
@@ -15,3 +16,12 @@ import type { ReportLoader } from "@/lib/reports/types";
  * registry test fails on a report without a loader or a loader without one.
  */
 export const registeredExtensionLoaders: Readonly<Record<string, ReportLoader>> = {};
+
+/**
+ * Each extension's own permissions, for list and record grants written
+ * `["ext:<id>", "<action>"]`. Empty in core. A fork adds one line, e.g.
+ *
+ *   import { MILLING_GRANTS } from "./milling/grants";
+ *   export const registeredExtensionGrants = [MILLING_GRANTS];
+ */
+export const registeredExtensionGrants: readonly ExtensionGrantsServer[] = [];

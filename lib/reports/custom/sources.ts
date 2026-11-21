@@ -1,7 +1,7 @@
 import type { AuthenticatedSession } from "@/lib/auth-core/types";
 import { canReadReport } from "@/lib/reports/access";
 import { canReadList } from "@/lib/reports/list-query";
-import { listContext } from "@/lib/reports/request";
+import { extensionGrantsFor, listContext } from "@/lib/reports/request";
 import type { Reader } from "@/lib/reports/custom/store";
 import { REPORT_DEFINITIONS } from "@/lib/reports/registry";
 import { disabledReportKeys } from "@/lib/reports/settings";
@@ -29,7 +29,7 @@ export function readerOf(session: AuthenticatedSession): Reader {
 export async function readableSources(session: AuthenticatedSession): Promise<ReportDefinition[]> {
   const access = { role: session.user.role, enabledFeatures: session.user.enabledFeatures };
   const disabled = await disabledReportKeys(session.user.companyId);
-  const list = listContext(session);
+  const list = listContext(session, new Date(), await extensionGrantsFor(session));
   return REPORT_DEFINITIONS.filter((definition) => {
     if (disabled.has(definition.key) || !canReadReport(definition, access)) return false;
     // A shop's sources are lists and report faces: their own check (the retail matrix) decides too.

@@ -237,7 +237,9 @@ export type AdminListGrant = ["admin", OperatorAction];
 export type FeatureResource = "crm.core" | "crm.documents" | "stores.catalogue" | "stores.inventory";
 export type FeatureAction = "view" | "create" | "update" | "delete";
 export type FeatureListGrant = [FeatureResource, FeatureAction];
-export type ListGrant = RetailListGrant | AdminListGrant | FeatureListGrant;
+/** An extension's own permission (`["ext:milling", "intake.approve"]`), answered by its `registeredExtensionGrants` entry. */
+export type ExtensionListGrant = [`ext:${string}`, string];
+export type ListGrant = RetailListGrant | AdminListGrant | FeatureListGrant | ExtensionListGrant;
 
 /** How a judgement is coloured. Colour always comes with a word. */
 export type Tone = "ok" | "warn" | "bad" | "info" | "neutral" | "hollow" | "pending" | "gold";
