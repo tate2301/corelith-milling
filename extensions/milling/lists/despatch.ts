@@ -112,17 +112,27 @@ const orders: ListSpec = {
     { key: "bags", label: "Bags", kind: "number", cell: "num", total: "sum", width: "80px", align: "end", priority: 1 },
     { key: "kg", label: "Kg", kind: "number", cell: "num", total: "sum", width: "100px", align: "end", priority: 2 },
     { key: "createdAt", label: "Taken", kind: "date", cell: "date", hidden: true, width: "150px", align: "end", priority: 3 },
+    { key: "invoiced", label: "Invoiced", kind: "status", cell: "dot", tones: { Yes: "ok", No: "hollow" }, width: "100px", align: "start", priority: 3 },
     { key: "needed", label: "Needed", kind: "date", cell: "date", dayFormat: "medium", width: "120px", align: "end", priority: 2 },
   ],
-  rowHref: "/milling/orders?order={id}",
-  bulk: [{ key: "export" }],
-  primary: { label: "New order", icon: "plus", requires: mill("order.manage"), href: "/milling/orders?new=1" },
+  rowHref: "/milling/collections/{customerId}",
+  rowMenu: [
+    { key: "confirm", label: "Confirm", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT"] }], do: { confirm: { title: "Confirm the order?", body: "Its bags are reserved, oldest lots first, ready for a despatch note.", confirm: "Confirm" }, endpoint: "/api/milling/customer-orders/confirm-many" } },
+    { key: "invoice", label: "Invoice in Books", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DELIVERED"] }, { column: "invoiced", op: "is", value: ["No"] }], do: { confirm: { title: "Invoice what was delivered?", body: "A draft invoice for the delivered bags goes to Books, to issue there.", confirm: "Invoice" }, endpoint: "/api/milling/customer-orders/invoice-many" } },
+    { key: "cancel", label: "Cancel", tone: "bad", separated: true, requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT", "CONFIRMED"] }], do: { sheet: "mill-order-cancel" } },
+  ],
+  bulk: [
+    { key: "confirm", label: "Confirm", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT"] }], do: { confirm: { title: "Confirm these orders?", body: "Each reserves its bags, oldest lots first. One without the bags in stock stays a draft.", confirm: "Confirm" }, endpoint: "/api/milling/customer-orders/confirm-many" } },
+    { key: "cancel", label: "Cancel", tone: "bad", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT", "CONFIRMED"] }], do: { sheet: "mill-order-cancel" } },
+    { key: "export" },
+  ],
+  primary: { label: "New order", icon: "plus", requires: mill("order.manage"), sheet: "mill-order-new" },
   card: { title: "customer", badge: "state", figure: "bags", meta: "{code} · {products}", metaMono: ["code"] },
   empty: {
     icon: "ClipboardText",
     title: "No orders yet",
     line: "An order is what a customer wants and when. Confirmed orders reserve the oldest bags and go out on a despatch note.",
-    primary: { label: "New order", href: "/milling/orders?new=1", requires: mill("order.manage") },
+    primary: { label: "New order", sheet: "mill-order-new", requires: mill("order.manage") },
   },
 };
 

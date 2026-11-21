@@ -329,6 +329,7 @@ const orders: ReportLoader = {
         (row): ReportRow => ({
           id: row.id,
           code: row.code,
+          customerId: row.customerId,
           customer: customers.find((customer) => customer.id === row.customerId)?.name ?? null,
           destination: destinations.find((entry) => entry.id === row.destinationId)?.name ?? "Collected",
           products: row.lines.map((line) => `${line.bags} × ${product(line.productId)?.name ?? ""}`).join(", "),
@@ -336,6 +337,7 @@ const orders: ReportLoader = {
           state: ORDER_STATE[row.status] ?? row.status,
           bags: row.lines.reduce((sum, line) => sum + line.bags, 0),
           kg: row.lines.reduce((sum, line) => sum + line.bags * Number(product(line.productId)?.netWeightKg ?? 0), 0),
+          invoiced: row.invoiceId ? "Yes" : "No",
           needed: row.requiredDate ? isoDay(row.requiredDate) : null,
           createdAt: row.createdAt.toISOString(),
           date: row.requiredDate ? isoDay(row.requiredDate) : isoDay(row.createdAt),
@@ -350,6 +352,64 @@ const orders: ReportLoader = {
   },
 };
 
+const PLAN_STATE: Record<string, string> = { DRAFT: "Draft", SUBMITTED: "To approve", APPROVED: "Approved", IN_PROGRESS: "Running", COMPLETED: "Done", CLOSED: "Done", CANCELLED: "Cancelled" };
+
+/** Production › Plan: every production plan, newest day first. */
+const plans: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingProductionOrder.findMany({ where: { companyId: ctx.companyId }, orderBy: [{ productionDate: "desc" }, { code: "desc" }], take: 5000, include: { lines: true } });
+    const [products, names] = await Promise.all([
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: rows.flatMap((row) => row.lines.map((line) => line.productId)) } }, select: { id: true, name: true } }),
+      userNames(ctx.companyId, rows.map((row) => row.supervisorId)),
+    ]);
+    const name = (id: string) => products.find((product) => product.id === id)?.name ?? "";
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          code: row.code,
+          date: row.productionDate.toISOString().slice(0, 10),
+          dateText: row.productionDate.toLocaleDateString("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }),
+          shift: row.shiftKind === "NIGHT" ? "Night" : "Day",
+          stateKey: row.status,
+          state: PLAN_STATE[row.status] ?? row.status,
+          products: row.lines.map((line) => (line.bags ? `${line.bags} × ${name(line.productId)}` : `${Number(line.kg).toLocaleString("en-GB")} kg ${name(line.productId)}`)).join(", "),
+          maizeKg: Number(row.maizeNeededKg),
+          short: row.approvedShort ? "Approved short" : null,
+          supervisor: row.supervisorId ? (names.get(row.supervisorId) ?? null) : null,
+        }),
+      ),
+    );
+  },
+};
+
+const SHIFT_STATE: Record<string, string> = { PLANNED: "Planned", OPEN: "Open", CLOSED: "To approve", APPROVED: "Approved" };
+
+/** Production › Shifts: every shift, newest first, with its crew. */
+const shifts: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingShift.findMany({ where: { companyId: ctx.companyId }, orderBy: { scheduledStart: "desc" }, take: 5000, include: { assignments: { select: { attendance: true } } } });
+    const names = await userNames(ctx.companyId, rows.map((row) => row.supervisorId));
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          code: row.code,
+          kind: row.kind === "NIGHT" ? "Night" : "Day",
+          stateKey: row.status,
+          state: SHIFT_STATE[row.status] ?? row.status,
+          starts: dayAndTime(row.scheduledStart),
+          startsAt: row.scheduledStart.toISOString(),
+          date: isoDay(row.scheduledStart),
+          supervisor: row.supervisorId ? (names.get(row.supervisorId) ?? null) : null,
+          crew: row.assignments.length,
+          present: row.assignments.filter((assignment) => ["PRESENT", "LATE"].includes(assignment.attendance)).length,
+        }),
+      ),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -360,4 +420,6 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-despatch-list": despatches,
   "milling-route-list": routes,
   "milling-order-list": orders,
+  "milling-plan-list": plans,
+  "milling-shift-list": shifts,
 };
