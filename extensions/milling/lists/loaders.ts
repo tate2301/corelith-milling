@@ -3,7 +3,8 @@ import { result } from "@/lib/reports/loaders/shared";
 import type { ReportLoader, ReportRow } from "@/lib/reports/types";
 
 import { targetHref } from "@/components/milling/targets";
-import { listTrips } from "@/lib/milling/distribution/trips";
+import { listRoutes, listTrips, vehicleLabels } from "@/lib/milling/distribution/trips";
+import { checkWeightSummary } from "@/lib/milling/production/packing";
 import { EXCEPTION_TYPES } from "@/lib/milling/exceptions/exceptions";
 import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
 
@@ -130,8 +131,233 @@ const exceptions: ReportLoader = {
   options: async () => ({ type: Object.values(EXCEPTION_TYPES).map((value) => ({ value: String(value), label: String(value) })) }),
 };
 
+const RUN_STATE: Record<string, string> = { OPEN: "Started", IN_PROGRESS: "Running", AWAITING_DECISION: "On hold", COMPLETED: "Completed" };
+const dayAndTime = (value: Date) => `${new Date(value).toLocaleDateString("en-GB", { timeZone: ZONE, weekday: "short" })} ${clock(value)}`;
+
+/** Production › Runs: every batch, newest first, with its shift, plan and output. */
+const runs: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingBatch.findMany({ where: { companyId: ctx.companyId }, orderBy: { startedAt: "desc" }, take: 5000, include: { outputs: { select: { quantityKg: true } } } });
+    const [shifts, plans, names] = await Promise.all([
+      prisma.millingShift.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.shiftId).filter((id): id is string => Boolean(id)) } }, select: { id: true, kind: true } }),
+      prisma.millingProductionOrder.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.orderId).filter((id): id is string => Boolean(id)) } }, select: { id: true, code: true } }),
+      userNames(ctx.companyId, rows.map((row) => row.createdById)),
+    ]);
+    return result(
+      rows.map((row): ReportRow => {
+        const maizeKg = Number(row.maizeIssuedKg);
+        const outputKg = row.outputKg === null ? row.outputs.reduce((sum, output) => sum + Number(output.quantityKg), 0) : Number(row.outputKg);
+        const kind = shifts.find((shift) => shift.id === row.shiftId)?.kind;
+        return {
+          id: row.id,
+          code: row.code,
+          shift: kind === "NIGHT" ? "Night" : kind === "DAY" ? "Day" : null,
+          plan: plans.find((plan) => plan.id === row.orderId)?.code ?? null,
+          stateKey: row.status,
+          state: RUN_STATE[row.status] ?? row.status,
+          maizeKg,
+          outputKg,
+          extraction: maizeKg > 0 && outputKg > 0 ? Math.round((outputKg / maizeKg) * 1000) / 10 : null,
+          startedBy: names.get(row.createdById) ?? null,
+          startedAt: row.startedAt.toISOString(),
+          started: dayAndTime(row.startedAt),
+          date: isoDay(row.startedAt),
+        };
+      }),
+    );
+  },
+};
+
+/** Production › Packing: every packing run, newest first. */
+const packing: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingPackRun.findMany({ where: { companyId: ctx.companyId }, orderBy: { packedAt: "desc" }, take: 5000 });
+    const recipes = await prisma.millingPackRecipe.findMany({ where: { companyId: ctx.companyId } });
+    const [products, lots, names] = await Promise.all([
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: recipes.map((recipe) => recipe.packedProductId) } }, select: { id: true, name: true } }),
+      prisma.millingLot.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.bulkLotId) } }, select: { id: true, code: true } }),
+      userNames(ctx.companyId, rows.map((row) => row.packedById)),
+    ]);
+    return result(
+      rows.map((row): ReportRow => {
+        const recipe = recipes.find((entry) => entry.id === row.recipeId);
+        const checks = checkWeightSummary(row.checkWeights.map(Number), Number(recipe?.kgPerBag ?? 0));
+        return {
+          id: row.id,
+          code: row.code,
+          product: products.find((product) => product.id === recipe?.packedProductId)?.name ?? null,
+          bulkLot: lots.find((lot) => lot.id === row.bulkLotId)?.code ?? null,
+          bags: row.bagsPacked,
+          damaged: row.damagedBags,
+          bulkKg: Number(row.bulkUsedKg),
+          varianceKg: Number(row.varianceKg),
+          checks: !checks ? "Not taken" : checks.under > 0 ? "Light" : "In range",
+          checksTone: !checks ? "hollow" : checks.under > 0 ? "warn" : "ok",
+          packedBy: names.get(row.packedById) ?? null,
+          packedAt: row.packedAt.toISOString(),
+          packed: dayAndTime(row.packedAt),
+          date: isoDay(row.packedAt),
+        };
+      }),
+    );
+  },
+  options: async (ctx) => {
+    const recipes = await prisma.millingPackRecipe.findMany({ where: { companyId: ctx.companyId }, select: { packedProductId: true } });
+    const products = await prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: recipes.map((recipe) => recipe.packedProductId) } }, select: { name: true } });
+    return { product: distinct(products.map((product) => product.name)) };
+  },
+};
+
+const LOT_STATE: Record<string, string> = { HOLD: "On hold", AVAILABLE: "Released", RELEASED: "Released", REJECTED: "Rejected", CONSUMED: "Used" };
+const ORIGIN: Record<string, string> = { BATCH: "Run", INTAKE: "Intake", RETURN: "Return" };
+
+/** Quality › Tests: lots that pass through QC, with their latest test and anything they wait on. */
+const tests: ReportLoader = {
+  load: async (ctx) => {
+    const lots = await prisma.millingLot.findMany({ where: { companyId: ctx.companyId, originType: { in: ["BATCH", "RETURN", "INTAKE"] } }, orderBy: { producedAt: "desc" }, include: { balances: true }, take: 5000 });
+    const ids = lots.map((lot) => lot.id);
+    const [products, inspections, open] = await Promise.all([
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: lots.map((lot) => lot.productId) } }, select: { id: true, name: true } }),
+      prisma.millingQcInspection.findMany({ where: { companyId: ctx.companyId, targetType: "MillingLot", targetId: { in: ids } }, orderBy: { inspectedAt: "desc" } }),
+      prisma.millingException.findMany({ where: { companyId: ctx.companyId, targetType: "MillingLot", targetId: { in: ids }, status: "OPEN" }, select: { targetId: true, code: true } }),
+    ]);
+    return result(
+      lots.map((lot): ReportRow => {
+        const last = inspections.find((inspection) => inspection.targetId === lot.id);
+        const lastTest = !last ? "Not tested" : last.outcome === "PASS" ? "Passed" : last.outcome === "FAIL" ? "Failed" : "Incomplete";
+        return {
+          id: lot.id,
+          code: lot.code,
+          product: products.find((product) => product.id === lot.productId)?.name ?? null,
+          origin: ORIGIN[lot.originType] ?? lot.originType,
+          quantity: lot.balances.reduce((sum, row) => sum + Number(row.quantity), 0),
+          lastTest,
+          lastTestTone: lastTest === "Passed" ? "ok" : lastTest === "Failed" ? "bad" : lastTest === "Incomplete" ? "warn" : "hollow",
+          stateKey: lot.status,
+          state: LOT_STATE[lot.status] ?? lot.status,
+          waiting: open.filter((row) => row.targetId === lot.id).map((row) => row.code).join(", ") || null,
+          producedAt: lot.producedAt.toISOString(),
+          made: dayAndTime(lot.producedAt),
+          date: isoDay(lot.producedAt),
+        };
+      }),
+    );
+  },
+};
+
+const DELIVERY_STATE: Record<string, string> = { PLANNED: "Planned", LOADING: "Loading", DISPATCHED: "Out", DELIVERED: "Delivered", CLOSED: "Closed", CANCELLED: "Cancelled" };
+
+/** Despatch › Despatches: every despatch note, its customers and its load. */
+const despatches: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingDelivery.findMany({ where: { companyId: ctx.companyId }, orderBy: { createdAt: "desc" }, take: 5000, include: { lines: { select: { bags: true, orderId: true, productId: true } } } });
+    const orderIds = [...new Set(rows.flatMap((row) => row.lines.map((line) => line.orderId)))];
+    const [orders, vehicles, products, destinations] = await Promise.all([
+      prisma.millingCustomerOrder.findMany({ where: { companyId: ctx.companyId, id: { in: orderIds } }, select: { id: true, customerId: true } }),
+      vehicleLabels(prisma, ctx.companyId, [...new Set(rows.map((row) => row.vehicleId))]),
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: rows.flatMap((row) => row.lines.map((line) => line.productId)) } }, select: { id: true, netWeightKg: true } }),
+      prisma.millingDestination.findMany({ where: { companyId: ctx.companyId }, select: { id: true, name: true } }),
+    ]);
+    const customers = await prisma.customer.findMany({ where: { companyId: ctx.companyId, id: { in: orders.map((order) => order.customerId) } }, select: { id: true, name: true } });
+    const customerOf = (orderId: string) => customers.find((customer) => customer.id === orders.find((order) => order.id === orderId)?.customerId)?.name ?? null;
+    return result(
+      rows.map((row): ReportRow => {
+        const names = [...new Set(row.lines.map((line) => customerOf(line.orderId)).filter((name): name is string => Boolean(name)))];
+        const kg = row.lines.reduce((sum, line) => sum + line.bags * Number(products.find((product) => product.id === line.productId)?.netWeightKg ?? 0), 0);
+        return {
+          id: row.id,
+          code: row.code,
+          customers: names.join(", ") || null,
+          firstCustomer: names[0] ?? null,
+          stateKey: row.status,
+          state: DELIVERY_STATE[row.status] ?? row.status,
+          vehicle: vehicles(row.vehicleId),
+          destination: destinations.find((entry) => entry.id === row.destinationId)?.name ?? null,
+          bags: row.lines.reduce((sum, line) => sum + line.bags, 0),
+          tonnes: Math.round((kg / 1000) * 10) / 10,
+          createdAt: row.createdAt.toISOString(),
+          issued: dayAndTime(row.createdAt),
+          date: isoDay(row.createdAt),
+        };
+      }),
+    );
+  },
+  options: async (ctx) => {
+    const customers = await prisma.customer.findMany({ where: { companyId: ctx.companyId, archivedAt: null }, select: { name: true }, orderBy: { name: "asc" }, take: 500 });
+    const used = await prisma.millingDelivery.findMany({ where: { companyId: ctx.companyId }, select: { vehicleId: true }, distinct: ["vehicleId"] });
+    const label = await vehicleLabels(prisma, ctx.companyId, used.map((row) => row.vehicleId));
+    return { customer: distinct(customers.map((row) => row.name)), vehicle: distinct(used.map((row) => label(row.vehicleId))) };
+  },
+};
+
+/** Despatch › Routes: the routes the trucks run. */
+const routes: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await listRoutes(prisma, ctx.companyId);
+    return result(
+      rows.map(
+        (route): ReportRow => ({
+          id: route.id,
+          code: route.code,
+          name: route.name,
+          areas: route.areas,
+          stops: route.stops,
+          days: route.visitDaysLabel,
+          vehicle: route.vehicle,
+          km: route.km,
+          stateKey: route.isActive ? "ACTIVE" : "STOPPED",
+        }),
+      ),
+    );
+  },
+};
+
+const ORDER_STATE: Record<string, string> = { DRAFT: "Draft", CONFIRMED: "Confirmed", IN_DELIVERY: "On a truck", DELIVERED: "Delivered", CLOSED: "Closed", CANCELLED: "Cancelled" };
+
+/** Despatch › Orders: what customers ordered. */
+const orders: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingCustomerOrder.findMany({ where: { companyId: ctx.companyId }, orderBy: { createdAt: "desc" }, take: 5000, include: { lines: true } });
+    const [customers, destinations, products] = await Promise.all([
+      prisma.customer.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.customerId) } }, select: { id: true, name: true } }),
+      prisma.millingDestination.findMany({ where: { companyId: ctx.companyId }, select: { id: true, name: true } }),
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: rows.flatMap((row) => row.lines.map((line) => line.productId)) } }, select: { id: true, name: true, netWeightKg: true } }),
+    ]);
+    const product = (id: string) => products.find((entry) => entry.id === id);
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          code: row.code,
+          customer: customers.find((customer) => customer.id === row.customerId)?.name ?? null,
+          destination: destinations.find((entry) => entry.id === row.destinationId)?.name ?? "Collected",
+          products: row.lines.map((line) => `${line.bags} × ${product(line.productId)?.name ?? ""}`).join(", "),
+          stateKey: row.status,
+          state: ORDER_STATE[row.status] ?? row.status,
+          bags: row.lines.reduce((sum, line) => sum + line.bags, 0),
+          kg: row.lines.reduce((sum, line) => sum + line.bags * Number(product(line.productId)?.netWeightKg ?? 0), 0),
+          needed: row.requiredDate ? isoDay(row.requiredDate) : null,
+          createdAt: row.createdAt.toISOString(),
+          date: row.requiredDate ? isoDay(row.requiredDate) : isoDay(row.createdAt),
+        }),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await prisma.millingCustomerOrder.findMany({ where: { companyId: ctx.companyId }, select: { customerId: true }, distinct: ["customerId"] });
+    const customers = await prisma.customer.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.customerId) } }, select: { name: true } });
+    return { customer: distinct(customers.map((row) => row.name)) };
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
   "milling-exception-list": exceptions,
+  "milling-run-list": runs,
+  "milling-packing-list": packing,
+  "milling-test-list": tests,
+  "milling-despatch-list": despatches,
+  "milling-route-list": routes,
+  "milling-order-list": orders,
 };

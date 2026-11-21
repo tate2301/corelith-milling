@@ -31,7 +31,7 @@ export function runFigures(row: { odometerOut: unknown; odometerIn: unknown; fue
   return { km, litres, kmPerLitre: km !== null && litres ? Math.round((km / litres) * 100) / 100 : null };
 }
 
-async function vehicleLabels(db: Db, companyId: string, ids: string[]) {
+export async function vehicleLabels(db: Db, companyId: string, ids: string[]) {
   const [equipment, profiles] = await Promise.all([
     db.equipment.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, equipmentCode: true, registrationNumber: true } }),
     db.millingVehicleProfile.findMany({ where: { companyId, equipmentId: { in: ids } }, select: { equipmentId: true, registrationNumber: true } }),

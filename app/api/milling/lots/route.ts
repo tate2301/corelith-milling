@@ -1,11 +1,13 @@
 import { millRoute } from "@/lib/milling/api";
 import { prisma } from "@/lib/prisma";
 
-/** Lots for QC: `?status=HOLD` (default) with what each holds and its latest inspection. */
+/** Lots for QC: `?status=HOLD` (default), or one lot by `?id=`, with what each holds and its latest inspection. */
 export const GET = millRoute(null, async ({ companyId }, request) => {
-  const status = new URL(request.url).searchParams.get("status") ?? "HOLD";
+  const params = new URL(request.url).searchParams;
+  const id = params.get("id");
+  const status = params.get("status") ?? "HOLD";
   const lots = await prisma.millingLot.findMany({
-    where: { companyId, status, originType: { in: ["BATCH", "RETURN", "INTAKE"] } },
+    where: { companyId, ...(id ? { id } : { status }), originType: { in: ["BATCH", "RETURN", "INTAKE"] } },
     orderBy: { producedAt: "asc" },
     include: { balances: true },
     take: 200,

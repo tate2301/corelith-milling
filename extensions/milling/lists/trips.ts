@@ -51,13 +51,13 @@ const trips: ListSpec = {
   rowHref: "/milling/deliveries/{id}",
   rowMenu: [{ key: "open", label: "Open", requires: MILL_VIEW, do: { href: "/milling/deliveries/{id}" } }],
   bulk: [{ key: "export" }],
-  primary: { label: "New trip", icon: "plus", requires: mill("delivery.manage"), href: "/milling/deliveries?tab=ready" },
+  primary: { label: "New trip", icon: "plus", requires: mill("delivery.manage"), sheet: "mill-despatch-new" },
   card: { title: "code", badge: "state", figure: "km", meta: "{route} · {vehicle}", meta2: "{dateText} · {delivered} delivered" },
   empty: {
     icon: "Truck",
     title: "No trips yet",
     line: "A trip starts when despatch notes leave on a vehicle. Its stops, kilometres and fuel show here.",
-    primary: { label: "Start a trip", href: "/milling/deliveries?tab=ready", requires: mill("delivery.manage") },
+    primary: { label: "Start a trip", sheet: "mill-despatch-new", requires: mill("delivery.manage") },
   },
 };
 
