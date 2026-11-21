@@ -5,6 +5,7 @@ import type { ReportLoader, ReportRow } from "@/lib/reports/types";
 import { targetHref } from "@/components/milling/targets";
 import { listRoutes, listTrips, vehicleLabels } from "@/lib/milling/distribution/trips";
 import { checkWeightSummary } from "@/lib/milling/production/packing";
+import { collections, listVisits } from "@/lib/milling/customers/customers";
 import { EXCEPTION_TYPES } from "@/lib/milling/exceptions/exceptions";
 import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
 
@@ -410,6 +411,66 @@ const shifts: ReportLoader = {
   },
 };
 
+const CUSTOMER_STATE: Record<string, string> = { CURRENT: "Current", OVERDUE: "Overdue", OVER_LIMIT: "Over limit" };
+const dollars = (value: number) => "$" + value.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Customers › Collections: everyone Books says owes the mill. */
+const customers: ReportLoader = {
+  load: async (ctx) => {
+    const { rows } = await collections(prisma, ctx.companyId);
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          name: row.name,
+          route: row.route,
+          terms: `${row.termsDays} days`,
+          creditLimit: row.creditLimit,
+          owes: row.owes,
+          overdue: row.overdue,
+          promise: row.promise ? `${dollars(row.promise.amount)} by ${dayText(row.promise.promisedFor)}` : null,
+          promiseTone: row.promise?.passed ? "warn" : null,
+          stateKey: row.state,
+          state: CUSTOMER_STATE[row.state] ?? row.state,
+        }),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const routes = await prisma.customerRoute.findMany({ where: { companyId: ctx.companyId }, select: { code: true }, orderBy: { code: "asc" } });
+    return { route: distinct(routes.map((route) => route.code)) };
+  },
+};
+
+/** Customers › Visits: every shop visit, newest first. */
+const visits: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await listVisits(prisma, ctx.companyId, { take: 5000 });
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          customerId: row.customerId,
+          customer: row.customer,
+          route: row.route,
+          rep: row.rep,
+          competitorPrice: row.competitorPrice,
+          ourBags: row.ourBagsOnShelf,
+          share: row.shelfSharePct,
+          note: row.note,
+          visitedAt: row.visitedAt.toISOString(),
+          visited: dayAndTime(row.visitedAt),
+          date: isoDay(row.visitedAt),
+        }),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await listVisits(prisma, ctx.companyId, { take: 5000 });
+    return { route: distinct(rows.map((row) => row.route)), rep: distinct(rows.map((row) => row.rep)) };
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -422,4 +483,6 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-order-list": orders,
   "milling-plan-list": plans,
   "milling-shift-list": shifts,
+  "milling-customer-list": customers,
+  "milling-visit-list": visits,
 };
