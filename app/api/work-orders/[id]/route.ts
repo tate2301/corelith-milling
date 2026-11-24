@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { validateSession, successResponse, errorResponse } from "@/lib/api-utils";
 import { postMoney, recordEvent } from "@/lib/books/core";
+import { serviceDone } from "@/lib/maintenance/plans";
 import { readWorkOrderRecord } from "@/lib/maintenance/work-order-record";
 import { partSchema } from "@/lib/maintenance/work-orders";
 import { emitWorkOrderStatusNotification } from "@/lib/notifications";
@@ -143,6 +144,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           },
         },
       });
+    }
+
+    if (validated.status === "COMPLETED" && existing.status !== "COMPLETED") {
+      // A service done: its plan moves on to its next due (lib/maintenance/plans.ts).
+      await serviceDone(prisma, { workOrderId: updated.id, doneAt: updated.downtimeEnd ?? new Date() });
     }
 
     if (validated.status === "COMPLETED") {
