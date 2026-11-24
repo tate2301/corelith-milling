@@ -18,6 +18,7 @@ const trips: ListSpec = {
     { key: "closed", label: "Closed", where: [{ column: "stateKey", op: "is", value: ["CLOSED"] }] },
   ],
   filters: [
+    { key: "onRoute", type: "parent", column: "routeId" },
     { key: "date", label: "Date", type: "period", any: "Any time", column: "date", primary: true, default: "this-week" },
     { key: "route", label: "Route", type: "choice", any: "Any", primary: true, optionsFromLoader: true, column: "routeId" },
     { key: "vehicle", label: "Vehicle", type: "choice", any: "Any", primary: true, optionsFromLoader: true, column: "vehicle" },

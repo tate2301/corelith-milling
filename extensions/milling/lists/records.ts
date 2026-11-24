@@ -52,3 +52,74 @@ export const STOPS_LIST: ReportDefinition = {
   defaults: { sort: [{ column: "order", dir: "asc" }] },
   list: stops,
 };
+
+/** A customer's unpaid invoices in Books (CU-A2), oldest due first, overdue ones flagged. */
+const invoices: ListSpec = {
+  noun: "invoices",
+  read: MILL_VIEW,
+  search: { placeholder: "Search invoices", keys: ["number"] },
+  filters: [{ key: "customer", type: "parent", column: "customerId" }],
+  sorts: [{ key: "due", label: "Oldest due first", rules: [{ column: "due", dir: "asc" }] }],
+  columns: [
+    { key: "number", label: "Invoice", kind: "code", cell: "ref", href: "/books/invoices/{id}", width: "minmax(140px,1fr)", align: "start", priority: 1 },
+    { key: "due", label: "Due", kind: "date", cell: "date", dayFormat: "medium", width: "130px", align: "end", priority: 1 },
+    { key: "state", label: "State", kind: "status", cell: "state", tones: { Overdue: "warn", Current: "ok" }, width: "120px", align: "start", priority: 1 },
+    { key: "late", label: "Days late", kind: "number", cell: "num", empty: "blank", width: "100px", align: "end", priority: 2 },
+    { key: "open", label: "Amount", kind: "money", cell: "money", currency: "USD", total: "sum", width: "130px", align: "end", priority: 1 },
+  ],
+  rowHref: "/books/invoices/{id}",
+  card: { title: "number", badge: "state", figure: "open", meta: "Due {dueText}" },
+  empty: { icon: "Receipt", title: "Nothing unpaid", line: "Their issued invoices in Books are all paid." },
+};
+
+/** A customer's despatches (CU-A2): each note that carried their bags, and what came of it. */
+const customerDespatches: ListSpec = {
+  noun: "despatches",
+  read: MILL_VIEW,
+  search: { placeholder: "Search despatches", keys: ["code", "order"] },
+  filters: [{ key: "customer", type: "parent", column: "customerId" }],
+  sorts: [{ key: "newest", label: "Newest first", rules: [{ column: "date", dir: "desc" }] }],
+  columns: [
+    { key: "code", label: "Note", kind: "code", cell: "ref", width: "150px", align: "start", priority: 1 },
+    { key: "order", label: "Order", kind: "code", cell: "mono", width: "150px", align: "start", priority: 3 },
+    { key: "date", label: "Date", kind: "date", cell: "date", dayFormat: "medium", width: "130px", align: "end", priority: 1 },
+    { key: "state", label: "State", kind: "status", cell: "state", tones: { Planned: "pending", Loading: "info", Out: "info", Delivered: "ok", Short: "warn", "Not delivered": "warn", Closed: "ok" }, width: "130px", align: "start", priority: 1 },
+    { key: "bags", label: "Bags", kind: "number", cell: "num", total: "sum", width: "90px", align: "end", priority: 1 },
+  ],
+  rowHref: "/milling/deliveries/{deliveryId}",
+  card: { title: "code", badge: "state", figure: "bags", meta: "{order}" },
+  empty: { icon: "Truck", title: "No despatches yet", line: "Their confirmed orders go out on despatch notes." },
+};
+
+/** A route's stops in the order the truck visits them (DS-B3). */
+const routeStops: ListSpec = {
+  noun: "stops",
+  read: MILL_VIEW,
+  search: { placeholder: "Search stops", keys: ["customer", "area"] },
+  filters: [{ key: "route", type: "parent", column: "routeId" }],
+  sorts: [{ key: "stop", label: "In order", rules: [{ column: "stop", dir: "asc" }] }],
+  columns: [
+    { key: "stop", label: "Stop", kind: "number", cell: "num", width: "70px", align: "start", priority: 1 },
+    { key: "customer", label: "Customer", kind: "text", cell: "link", width: "minmax(220px,1.6fr)", align: "start", priority: 1 },
+    { key: "area", label: "Area", kind: "text", cell: "muted", width: "minmax(130px,1fr)", align: "start", priority: 2 },
+    { key: "owes", label: "Owes", kind: "money", cell: "money", currency: "USD", total: "sum", width: "130px", align: "end", priority: 2 },
+  ],
+  rowHref: "/milling/collections/{id}",
+  card: { title: "customer", figure: "owes", meta: "Stop {stop} · {area}" },
+  empty: { icon: "MapTrifold", title: "No stops yet", line: "Add the shops the truck visits, in order." },
+};
+
+const recordSource = (key: string, title: string, list: ListSpec, sort: string, dir: "asc" | "desc"): ReportDefinition => ({
+  ...LIST_BASE,
+  key,
+  title,
+  href: "/milling",
+  params: [],
+  columns: list.columns,
+  defaults: { sort: [{ column: sort, dir }] },
+  list,
+});
+
+export const CUSTOMER_INVOICES_LIST = recordSource("milling-customer-invoices", "Customer invoices", invoices, "due", "asc");
+export const CUSTOMER_DESPATCHES_LIST = recordSource("milling-customer-despatches", "Customer despatches", customerDespatches, "date", "desc");
+export const ROUTE_STOPS_LIST = recordSource("milling-route-stops", "Route stops", routeStops, "stop", "asc");

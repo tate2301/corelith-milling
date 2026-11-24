@@ -55,6 +55,7 @@ const visits: ListSpec = {
   read: MILL_VIEW,
   search: { placeholder: "Search visits", keys: ["customer", "route", "rep", "note"] },
   filters: [
+    { key: "shop", type: "parent", column: "customerId" },
     { key: "date", label: "Date", type: "period", any: "Any time", column: "date", primary: true, default: "this-week" },
     { key: "route", label: "Route", type: "choice", any: "Any", primary: true, optionsFromLoader: true, column: "route" },
     { key: "rep", label: "Rep", type: "choice", any: "Anyone", primary: true, optionsFromLoader: true, column: "rep" },

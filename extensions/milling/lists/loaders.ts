@@ -6,7 +6,8 @@ import { targetHref } from "@/components/milling/targets";
 import { listRoutes, listTrips, vehicleLabels } from "@/lib/milling/distribution/trips";
 import { checkWeightSummary } from "@/lib/milling/production/packing";
 import { commissionStatement } from "@/lib/milling/books/commission-statement";
-import { collections, listVisits } from "@/lib/milling/customers/customers";
+import { balancesOf, collections, listVisits } from "@/lib/milling/customers/customers";
+import { routeDetail } from "@/lib/milling/distribution/trips";
 import { sellersBoard } from "@/lib/milling/sellers/views";
 import { EXCEPTION_TYPES } from "@/lib/milling/exceptions/exceptions";
 import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
@@ -28,8 +29,8 @@ async function userNames(companyId: string, ids: Array<string | null | undefined
 
 /** Despatch › Trips: every trip that has left, through the same reader as the trips API. */
 const trips: ReportLoader = {
-  load: async (ctx) => {
-    const { trips: rows } = await listTrips(prisma, ctx.companyId, { take: 2000 });
+  load: async (ctx, params) => {
+    const { trips: rows } = await listTrips(prisma, ctx.companyId, { take: 2000, routeId: params.onRoute ?? null });
     return result(
       rows.map(
         (trip): ReportRow => ({
@@ -446,8 +447,9 @@ const customers: ReportLoader = {
 
 /** Customers › Visits: every shop visit, newest first. */
 const visits: ReportLoader = {
-  load: async (ctx) => {
-    const rows = await listVisits(prisma, ctx.companyId, { take: 5000 });
+  load: async (ctx, params) => {
+    const all = await listVisits(prisma, ctx.companyId, { take: 5000 });
+    const rows = params.shop ? all.filter((row) => row.customerId === params.shop) : all;
     return result(
       rows.map(
         (row): ReportRow => ({
@@ -735,6 +737,78 @@ const sellerPayments: ReportLoader = {
   },
 };
 
+/** A customer's unpaid invoices, from Books. */
+const customerInvoices: ReportLoader = {
+  load: async (ctx, params) => {
+    if (!params.customer) return result([]);
+    const balances = await balancesOf(prisma, ctx.companyId, [params.customer]);
+    const rows = balances.get(params.customer)?.invoices ?? [];
+    return result(
+      rows.map(
+        (invoice): ReportRow => ({
+          id: invoice.id,
+          customerId: params.customer!,
+          number: invoice.number,
+          due: invoice.due ? isoDay(invoice.due) : null,
+          dueText: invoice.due ? dayText(invoice.due) : "—",
+          state: invoice.daysLate > 0 ? "Overdue" : "Current",
+          late: invoice.daysLate > 0 ? invoice.daysLate : null,
+          open: invoice.open,
+        }),
+      ),
+    );
+  },
+};
+
+/** A customer's despatches: their orders' lines on trips. */
+const customerDespatches: ReportLoader = {
+  load: async (ctx, params) => {
+    if (!params.customer) return result([]);
+    const orders = await prisma.millingCustomerOrder.findMany({ where: { companyId: ctx.companyId, customerId: params.customer }, select: { id: true, code: true } });
+    const lines = await prisma.millingDeliveryLine.findMany({ where: { orderId: { in: orders.map((order) => order.id) } }, include: { delivery: true } });
+    const byNote = new Map<string, { line: (typeof lines)[number]; bags: number; delivered: number; short: number }>();
+    for (const line of lines) {
+      const key = `${line.deliveryId}|${line.orderId}`;
+      const entry = byNote.get(key) ?? { line, bags: 0, delivered: 0, short: 0 };
+      entry.bags += line.bags;
+      entry.delivered += line.deliveredBags ?? 0;
+      entry.short += line.shortBags + line.damagedBags;
+      byNote.set(key, entry);
+    }
+    return result(
+      [...byNote.values()].map(({ line, bags, delivered, short }): ReportRow => {
+        const status = line.delivery.status;
+        const proven = ["DELIVERED", "CLOSED"].includes(status);
+        return {
+          id: `${line.deliveryId}-${line.orderId}`,
+          customerId: params.customer!,
+          deliveryId: line.deliveryId,
+          code: line.delivery.code,
+          order: orders.find((order) => order.id === line.orderId)?.code ?? null,
+          date: isoDay(line.delivery.dispatchedAt ?? line.delivery.createdAt),
+          state: proven ? (!delivered ? "Not delivered" : short ? "Short" : "Delivered") : (DELIVERY_STATE[status] ?? status),
+          bags,
+        };
+      }),
+    );
+  },
+};
+
+/** A route's stops, in order, with what each owes. */
+const routeStops: ReportLoader = {
+  load: async (ctx, params) => {
+    if (!params.route) return result([]);
+    const route = await routeDetail(prisma, ctx.companyId, params.route);
+    if (!route) return result([]);
+    const balances = await balancesOf(prisma, ctx.companyId, route.stops.map((stop) => stop.id));
+    return result(
+      route.stops.map(
+        (stop): ReportRow => ({ id: stop.id, routeId: route.id, stop: stop.stop, customer: stop.name, area: stop.area, owes: balances.get(stop.id)?.owes ?? 0 }),
+      ),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -752,6 +826,9 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-downtime-list": downtime,
   "milling-generator-list": generator,
   "milling-delivery-lines": stops,
+  "milling-customer-invoices": customerInvoices,
+  "milling-customer-despatches": customerDespatches,
+  "milling-route-stops": routeStops,
   "milling-seller-list": sellers,
   "milling-seller-trip-list": sellerTrips,
   "milling-seller-commission-list": sellerCommission,
