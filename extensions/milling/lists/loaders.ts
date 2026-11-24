@@ -155,6 +155,8 @@ const runs: ReportLoader = {
         return {
           id: row.id,
           code: row.code,
+          planId: row.orderId,
+          shiftId: row.shiftId,
           shift: kind === "NIGHT" ? "Night" : kind === "DAY" ? "Day" : null,
           plan: plans.find((plan) => plan.id === row.orderId)?.code ?? null,
           stateKey: row.status,
@@ -927,6 +929,51 @@ const runOutputs: ReportLoader = {
   },
 };
 
+/** A plan's lines: what it is to make, in bags or kilograms. */
+const planLines: ReportLoader = {
+  load: async (ctx, params) => {
+    if (!params.plan) return result([]);
+    const plan = await prisma.millingProductionOrder.findFirst({ where: { id: params.plan, companyId: ctx.companyId }, include: { lines: true } });
+    if (!plan) return result([]);
+    const products = await prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: plan.lines.map((line) => line.productId) } }, select: { id: true, name: true } });
+    return result(
+      plan.lines.map((line): ReportRow => ({ id: line.id, planId: plan.id, product: products.find((product) => product.id === line.productId)?.name ?? null, bags: line.bags, kg: Number(line.kg) })),
+    );
+  },
+};
+
+const ATTENDANCE_WORD: Record<string, string> = { PRESENT: "Present", LATE: "Late", ABSENT: "Absent", ON_LEAVE: "On leave" };
+
+/** A shift's crew: each person's duty, attendance, time and overtime. */
+const shiftCrew: ReportLoader = {
+  load: async (ctx, params) => {
+    if (!params.shift) return result([]);
+    const shift = await prisma.millingShift.findFirst({ where: { id: params.shift, companyId: ctx.companyId }, include: { assignments: true } });
+    if (!shift) return result([]);
+    const [employees, duties] = await Promise.all([
+      prisma.employee.findMany({ where: { companyId: ctx.companyId, id: { in: shift.assignments.map((row) => row.employeeId) } }, select: { id: true, name: true, employeeId: true } }),
+      prisma.millingShiftDuty.findMany({ where: { companyId: ctx.companyId }, select: { id: true, name: true } }),
+    ]);
+    return result(
+      shift.assignments.map((row): ReportRow => {
+        const person = employees.find((employee) => employee.id === row.employeeId);
+        return {
+          id: row.id,
+          shiftId: shift.id,
+          name: person?.name ?? null,
+          number: person?.employeeId ?? null,
+          duty: duties.find((duty) => duty.id === row.dutyId)?.name ?? null,
+          attendance: ATTENDANCE_WORD[row.attendance] ?? row.attendance,
+          reason: row.absenceReason,
+          clock: row.clockIn ? `${clock(row.clockIn)}${row.clockOut ? `–${clock(row.clockOut)}` : ""}` : null,
+          breakMinutes: row.breakMinutes,
+          overtime: Number(row.overtimeHours) || null,
+        };
+      }),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -951,6 +998,8 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-run-stages": runStages,
   "milling-run-maize": runMaize,
   "milling-run-outputs": runOutputs,
+  "milling-plan-lines": planLines,
+  "milling-shift-crew": shiftCrew,
   "milling-seller-list": sellers,
   "milling-seller-trip-list": sellerTrips,
   "milling-seller-commission-list": sellerCommission,

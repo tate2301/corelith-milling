@@ -18,6 +18,8 @@ const runs: ListSpec = {
     { key: "completed", label: "Completed", where: [{ column: "stateKey", op: "is", value: ["COMPLETED"] }] },
   ],
   filters: [
+    { key: "plan", type: "parent", column: "planId" },
+    { key: "onShift", type: "parent", column: "shiftId" },
     { key: "date", label: "Date", type: "period", any: "Any time", column: "date", primary: true, default: "this-week" },
     { key: "shift", label: "Shift", type: "choice", any: "Any", primary: true, options: [{ value: "Day", label: "Day" }, { value: "Night", label: "Night" }], column: "shift" },
   ],

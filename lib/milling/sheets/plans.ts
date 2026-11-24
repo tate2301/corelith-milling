@@ -248,10 +248,162 @@ const orderCancel: SheetKind = {
   requires: [["ext:milling", "order.manage"]],
 };
 
+type PlanDetail = { order: { id: string; code: string; status: string }; needs: { maizeKg: number; maizeAvailableKg: number; packaging: Array<{ name: string; needed: number; available: number }>; short: string[] } };
+const kgText = (value: number) => `${value.toLocaleString("en-GB", { maximumFractionDigits: 0 })} kg`;
+
+/** Approve a plan (PR, AP-A1): its maize and packaging are reserved, oldest lots first. Short of either, it needs a reason. */
+const planApprove: SheetKind = {
+  title: (_ctx, values) => `Approve ${String(values._code ?? "the plan")}`,
+  sub: (_ctx, values) => ((values._short as string[] | undefined) ?? []).length ? `Short of ${((values._short as string[]) ?? []).join("; ")}. It can be approved anyway, with a reason.` : "Its maize and packaging are reserved, oldest lots first.",
+  cur: "US$",
+  load: async (ctx) => {
+    const plan = await fetchJson<PlanDetail>(`/api/milling/orders/${ctx.id}`);
+    return { _code: plan.order.code, _short: plan.needs.short, _needs: plan.needs };
+  },
+  sections: [
+    {
+      fields: [
+        {
+          id: "_needsTable",
+          t: "read",
+          l: "What it needs",
+          v: null,
+          table: (values) => {
+            const needs = values._needs as PlanDetail["needs"] | undefined;
+            if (!needs) return null;
+            return { head: ["", "Needed", "Free now"], rows: [["Maize", kgText(needs.maizeKg), kgText(needs.maizeAvailableKg)], ...needs.packaging.map((row) => [row.name, String(row.needed), String(row.available)])], end: [1, 2] };
+          },
+        },
+        { id: "reason", t: "area", l: "Why approve it although short", rows: 2, show: (values) => ((values._short as string[] | undefined) ?? []).length > 0, needed: "Say why it is approved although short." },
+      ],
+    },
+  ],
+  note: "",
+  primary: (values) => (((values._short as string[] | undefined) ?? []).length ? "Approve although short" : "Approve"),
+  done: (_result, values) => `${String(values._code ?? "Plan")} approved`,
+  submit: (values, ctx) => ({ method: "POST", url: `/api/milling/orders/${ctx.id}/approve`, body: { approveShort: ((values._short as string[] | undefined) ?? []).length > 0, reason: text(values.reason) || null } }),
+  invalidate: [["list"], ["reports"], ["milling"], ["milling-plan"]],
+  requires: [["ext:milling", "plan.approve"]],
+};
+
+/** Cancel a plan: its reservations are released. The reason is kept with it. */
+const planCancel: SheetKind = {
+  title: "Cancel the plan",
+  sub: "Its maize and packaging reservations are released.",
+  cur: "US$",
+  sections: [{ fields: [{ id: "reason", t: "area", l: "Why", rows: 3, needed: "Say why the plan is cancelled.", schema: z.string().trim().min(3, "Say why the plan is cancelled.").max(2000) }] }],
+  note: "",
+  primary: "Cancel the plan",
+  primaryTone: "danger",
+  secondary: "Keep it",
+  done: "Plan cancelled",
+  submit: (values, ctx) => ({ method: "POST", url: `/api/milling/orders/${ctx.id}/cancel`, body: { reason: text(values.reason) } }),
+  invalidate: [["list"], ["reports"], ["milling"], ["milling-plan"]],
+  requires: [["ext:milling", "plan.edit"]],
+};
+
+type ShiftDetail = { shift: { id: string; code: string; materialInProcessKg: number | null; handoverNotes: string | null; assignments: Array<{ id: string; employeeId: string; name: string; dutyId: string | null; attendance: string; clockIn: string | null; clockOut: string | null; breakMinutes: number; absenceReason: string | null }> }; duties: Array<{ id: string; name: string }> };
+
+/** Close a shift: what is left in the machines and bins, and the handover to the next one. */
+const shiftClose: SheetKind = {
+  title: (_ctx, values) => `Close ${String(values._code ?? "the shift")}`,
+  sub: "What is left in the line closes each run's balance. The handover is read by the next shift.",
+  cur: "US$",
+  load: async (ctx) => {
+    const detail = await fetchJson<ShiftDetail>(`/api/milling/shifts/${ctx.id}`);
+    return { _code: detail.shift.code, material: detail.shift.materialInProcessKg === null ? "" : String(detail.shift.materialInProcessKg), how: "Estimated", handover: detail.shift.handoverNotes ?? "" };
+  },
+  sections: [
+    {
+      fields: [
+        { id: "material", t: "text", l: "Left in machines and bins, kg", half: true, mono: true, right: true, inputMode: "decimal", opt: true },
+        { id: "how", t: "seg", l: "The figure is", half: true, o: ["Measured", "Estimated"] },
+        { id: "handover", t: "area", l: "Handover", rows: 4, opt: true, p: "What the next shift needs to know" },
+      ],
+    },
+  ],
+  note: "Management approves it next; approval sends attendance and overtime to People.",
+  primary: "Close the shift",
+  done: (_result, values) => `${String(values._code ?? "Shift")} closed`,
+  submit: (values, ctx) => ({ method: "POST", url: `/api/milling/shifts/${ctx.id}/close`, body: { materialInProcessKg: text(values.material), materialEstimated: values.how !== "Measured", handoverNotes: text(values.handover) || null } }),
+  invalidate: [["list"], ["reports"], ["milling"], ["milling-shift"]],
+  requires: [["ext:milling", "shift.manage"]],
+};
+
+const ATTEND: Record<string, string> = { Present: "PRESENT", Late: "LATE", Absent: "ABSENT", "On leave": "ON_LEAVE" };
+const hhmm = (value: string | null) => (value ? new Date(value).toLocaleTimeString("en-GB", { timeZone: "Africa/Harare", hour: "2-digit", minute: "2-digit" }) : "");
+const atTime = (base: string | null, time: string) => {
+  if (!time) return null;
+  const day = base ? new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Harare", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(base)) : new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Harare", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return new Date(`${day}T${time}:00+02:00`).toISOString();
+};
+
+/** One person on a shift: their duty, attendance and time. Absence or leave needs its reason, for payroll. */
+const shiftPerson: SheetKind = {
+  title: (_ctx, values) => String(values._name ?? "Attendance and time"),
+  sub: (_ctx, values) => `On ${String(values._code ?? "the shift")}. Overtime is worked out from the time against the shift's hours.`,
+  cur: "US$",
+  load: async (ctx) => {
+    const detail = await fetchJson<ShiftDetail>(`/api/milling/shifts/${ctx.params.get("shift")}`);
+    const row = detail.shift.assignments.find((entry) => entry.id === ctx.id);
+    const _duty: Choice[] = detail.duties.map((duty) => ({ id: duty.id, label: duty.name }));
+    const word = Object.entries(ATTEND).find(([, key]) => key === row?.attendance)?.[0] ?? "Present";
+    return {
+      _name: row?.name ?? "",
+      _code: detail.shift.code,
+      _employeeId: row?.employeeId ?? "",
+      _clockBase: row?.clockIn ?? null,
+      _duty,
+      duty: _duty.find((option) => option.id === row?.dutyId)?.label ?? "None",
+      attendance: word,
+      reason: row?.absenceReason ?? "",
+      clockIn: hhmm(row?.clockIn ?? null),
+      clockOut: hhmm(row?.clockOut ?? null),
+      breakMinutes: String(row?.breakMinutes ?? 0),
+    };
+  },
+  sections: [
+    {
+      fields: [
+        { id: "duty", t: "text", l: "Duty", o: (values) => labels(values, "duty", true) },
+        { id: "attendance", t: "seg", l: "Attendance", o: Object.keys(ATTEND) },
+        { id: "reason", t: "text", l: "Why", show: (values) => values.attendance === "Absent" || values.attendance === "On leave", needed: "Say why: it goes to their attendance for payroll." },
+        { id: "clockIn", t: "text", l: "In", half: true, mono: true, p: "06:00", opt: true, show: (values) => values.attendance === "Present" || values.attendance === "Late", schema: z.string().regex(/^\d{2}:\d{2}$/, "As HH:MM.") },
+        { id: "clockOut", t: "text", l: "Out", half: true, mono: true, p: "14:30", opt: true, show: (values) => values.attendance === "Present" || values.attendance === "Late", schema: z.string().regex(/^\d{2}:\d{2}$/, "As HH:MM.") },
+        { id: "breakMinutes", t: "text", l: "Break, minutes", half: true, mono: true, right: true, inputMode: "numeric", opt: true, show: (values) => values.attendance === "Present" || values.attendance === "Late", schema: z.string().regex(/^\d+$/, "Whole minutes.") },
+      ],
+    },
+  ],
+  note: "",
+  primary: "Save",
+  done: (_result, values) => `${String(values._name ?? "Crew")} saved`,
+  submit: (values, ctx) => {
+    const present = values.attendance === "Present" || values.attendance === "Late";
+    const base = (values._clockBase as string | null) ?? null;
+    return {
+      method: "POST",
+      url: `/api/milling/shifts/${ctx.params.get("shift")}/crew`,
+      body: {
+        employeeId: values._employeeId,
+        dutyId: idOf(values, "duty"),
+        attendance: ATTEND[String(values.attendance)] ?? "PRESENT",
+        absenceReason: present ? null : text(values.reason),
+        ...(present ? { clockIn: atTime(base, text(values.clockIn)), clockOut: atTime(base, text(values.clockOut)), breakMinutes: numberOf(values.breakMinutes) ?? 0 } : {}),
+      },
+    };
+  },
+  invalidate: [["list"], ["reports"], ["milling"], ["milling-shift"]],
+  requires: [["ext:milling", "shift.manage"]],
+};
+
 export const PLAN_SHEETS: Record<string, SheetKind> = {
   "mill-plan-new": planNew,
   "mill-plan-send-back": planSendBack,
   "mill-order-new": orderNew,
   "mill-order-cancel": orderCancel,
   "mill-shift-new": shiftNew,
+  "mill-plan-approve": planApprove,
+  "mill-plan-cancel": planCancel,
+  "mill-shift-close": shiftClose,
+  "mill-shift-person": shiftPerson,
 };

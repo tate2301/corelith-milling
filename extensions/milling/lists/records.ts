@@ -212,3 +212,45 @@ const runOutputs: ListSpec = {
 export const RUN_STAGES_LIST = recordSource("milling-run-stages", "Run stages", runStages, "startedAt", "asc");
 export const RUN_MAIZE_LIST = recordSource("milling-run-maize", "Run maize", runMaize, "lot", "asc");
 export const RUN_OUTPUTS_LIST = recordSource("milling-run-outputs", "Run outputs", runOutputs, "product", "asc");
+
+/** What a plan is to make. */
+const planLines: ListSpec = {
+  noun: "lines",
+  read: MILL_VIEW,
+  search: { placeholder: "Search", keys: ["product"] },
+  filters: [{ key: "plan", type: "parent", column: "planId" }],
+  sorts: [{ key: "product", label: "Product", rules: [{ column: "product", dir: "asc" }] }],
+  columns: [
+    { key: "product", label: "Product", kind: "text", cell: "text", strong: true, width: "minmax(200px,1.6fr)", align: "start", priority: 1 },
+    { key: "bags", label: "Bags", kind: "number", cell: "num", total: "sum", empty: "dash", width: "100px", align: "end", priority: 1 },
+    { key: "kg", label: "Kg", kind: "number", cell: "num", total: "sum", width: "120px", align: "end", priority: 1 },
+  ],
+  rowHref: "/milling/plan/{planId}",
+  card: { title: "product", figure: "kg", meta: "{bags} bags" },
+  empty: { icon: "CalendarBlank", title: "Nothing to make yet", line: "A plan lists what the shift is to make." },
+};
+
+/** A shift's crew (DM: shift): duty, attendance, time in and out, breaks and overtime. Edit a person's time from their row. */
+const shiftCrew: ListSpec = {
+  noun: "people",
+  read: MILL_VIEW,
+  search: { placeholder: "Search the crew", keys: ["name", "number", "duty"] },
+  filters: [{ key: "shift", type: "parent", column: "shiftId" }],
+  sorts: [{ key: "name", label: "Name", rules: [{ column: "name", dir: "asc" }] }],
+  columns: [
+    { key: "name", label: "Person", kind: "text", cell: "text", strong: true, width: "minmax(160px,1.2fr)", align: "start", priority: 1 },
+    { key: "number", label: "Number", kind: "code", cell: "mono", width: "110px", align: "start", priority: 3 },
+    { key: "duty", label: "Duty", kind: "text", cell: "muted", width: "minmax(120px,1fr)", align: "start", priority: 2 },
+    { key: "attendance", label: "Attendance", kind: "status", cell: "state", tones: { Present: "ok", Late: "warn", Absent: "bad", "On leave": "neutral" }, width: "120px", align: "start", priority: 1 },
+    { key: "clock", label: "In and out", kind: "text", cell: "mono", empty: "dash", width: "130px", align: "start", priority: 1 },
+    { key: "breakMinutes", label: "Break min", kind: "number", cell: "num", width: "100px", align: "end", priority: 3 },
+    { key: "overtime", label: "Overtime h", kind: "number", cell: "num", total: "sum", empty: "dash", width: "110px", align: "end", priority: 2 },
+  ],
+  rowHref: "/milling/shifts/{shiftId}",
+  rowMenu: [{ key: "edit", label: "Attendance and time", requires: [["ext:milling", "shift.manage"]], do: { sheet: "mill-shift-person", with: { shift: "{shift}" } } }],
+  card: { title: "name", badge: "attendance", figure: "overtime", meta: "{duty} · {clock}" },
+  empty: { icon: "UsersThree", title: "No crew yet", line: "Plan the shift with its crew and their duties." },
+};
+
+export const PLAN_LINES_LIST = recordSource("milling-plan-lines", "Plan lines", planLines, "product", "asc");
+export const SHIFT_CREW_LIST = recordSource("milling-shift-crew", "Shift crew", shiftCrew, "name", "asc");
