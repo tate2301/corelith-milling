@@ -1,8 +1,6 @@
 import { withAuth } from "next-auth/middleware";
 import type { NextRequestWithAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
-import type { NextFetchEvent } from "next/server";
-import { authkit, handleAuthkitProxy, partitionAuthkitHeaders } from "@workos-inc/authkit-nextjs";
 import {
   getHostHeaderFromRequestHeaders,
   getPlatformHostContext,
@@ -69,30 +67,6 @@ const PORTAL_HOME_BY_ROLE = {
 // prefix here so a school teacher signing into a tenant that also runs payroll
 // cannot reach the salary bill by typing the URL.
 const WORKFORCE_MODULE_ALLOWED_ROLES = new Set(["SUPERADMIN", "MANAGER", "CLERK"]);
-
-/**
- * WorkOS AuthKit runs alongside NextAuth here, not in place of it: NextAuth
- * still decides who may open what. AuthKit only needs its request headers to
- * reach every page, because `withAuth()` (and the `AuthKitProvider` in the root
- * layout, through it) refuses to run on a route its proxy did not cover. The
- * proxy body hands them on through `passThrough` and `rewriteTo`.
- */
-const authkitRequestHeaders = new WeakMap<Request, Headers>();
-
-/** AuthKit's own routes: starting a sign-in, and the callback that finishes it. */
-const AUTHKIT_SIGN_IN_PATH = "/sign-in";
-const AUTHKIT_CALLBACK_PATH = (() => {
-  const redirectUri = process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI;
-  return redirectUri && URL.canParse(redirectUri) ? new URL(redirectUri).pathname : null;
-})();
-
-function passThrough(request: Request) {
-  return NextResponse.next({ request: { headers: authkitRequestHeaders.get(request) } });
-}
-
-function rewriteTo(request: Request, url: URL) {
-  return NextResponse.rewrite(url, { request: { headers: authkitRequestHeaders.get(request) } });
-}
 
 type PlatformToken = {
   companyId?: string;
@@ -185,12 +159,12 @@ async function denyPageFeature(
   // A Books address without the screens shows what they add, not a refusal:
   // the Books layout draws BkUpsell in place of the page (books-final §1.2).
   if (decision.featureKey === BOOKS_SCREENS_KEY && (pathname === "/books" || pathname.startsWith("/books/"))) {
-    return passThrough(request);
+    return NextResponse.next();
   }
   if (pathname === "/retail" || pathname.startsWith("/retail/")) {
     // Loaded only here: the nav registry carries the icon set.
     const { canRoleOpenRetailPath } = await import("@/lib/retail/nav");
-    if (!canRoleOpenRetailPath(role, pathname, searchParams)) return passThrough(request);
+    if (!canRoleOpenRetailPath(role, pathname, searchParams)) return NextResponse.next();
   }
   return denyFeature(request, decision);
 }
@@ -275,14 +249,14 @@ function redirectToLoginWithCallback(request: NextRequestWithAuth, loginPath: st
  * With the escape hatch on but the override off there is nowhere safe to send
  * anyone, so the redirect is dropped and the caller carries on where it is.
  */
-function redirectAcrossHost(request: NextRequestWithAuth, targetHostname: string, redirectUrl: URL) {
+function redirectAcrossHost(targetHostname: string, redirectUrl: URL) {
   if (isPreviewHostOverrideEnabled()) {
     redirectUrl.searchParams.set(PREVIEW_HOST_PARAM, targetHostname);
     return NextResponse.redirect(redirectUrl);
   }
 
   if (isHostEnforcementBypassed()) {
-    return passThrough(request);
+    return NextResponse.next();
   }
 
   redirectUrl.hostname = targetHostname;
@@ -292,20 +266,19 @@ function redirectAcrossHost(request: NextRequestWithAuth, targetHostname: string
 function redirectToTenantHost(request: NextRequestWithAuth, companySlug: string) {
   const rootDomain = getRootDomain();
   if (!rootDomain) {
-    return passThrough(request);
+    return NextResponse.next();
   }
 
-  return redirectAcrossHost(request, `${companySlug}.${rootDomain}`, request.nextUrl.clone());
+  return redirectAcrossHost(`${companySlug}.${rootDomain}`, request.nextUrl.clone());
 }
 
 function redirectToPortalHost(request: NextRequestWithAuth, tenantSlug: string, portalPrefix: string) {
   const rootDomain = getRootDomain();
   if (!rootDomain) {
-    return passThrough(request);
+    return NextResponse.next();
   }
 
   return redirectAcrossHost(
-    request,
     buildPortalHost(portalPrefix, tenantSlug, rootDomain),
     request.nextUrl.clone(),
   );
@@ -335,7 +308,7 @@ function toExternalAdminPath(pathname: string) {
   return null;
 }
 
-const nextAuthProxy = withAuth(
+export default withAuth(
   async function proxy(request) {
     const { pathname } = request.nextUrl;
     const isApiRequest = pathname.startsWith("/api/");
@@ -376,23 +349,23 @@ const nextAuthProxy = withAuth(
     // The control page is how you reach a preview whose tenant routing is
     // wrong, so it cannot itself be behind tenant routing.
     if (isPathWithinRoute(pathname, PREVIEW_HOST_PATH)) {
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     if (PUBLIC_ASSET_PATTERN.test(pathname)) {
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     if (pathname === ACCESS_BLOCKED_PATH) {
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     if (isPathWithinRoute(pathname, MARKETING_BASE_PATH)) {
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     if (CRM_PUBLIC_BASE_PATHS.some((base) => isPathWithinRoute(pathname, base))) {
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     const hostHeader = getHostHeaderFromRequestHeaders(request.headers);
@@ -413,7 +386,7 @@ const nextAuthProxy = withAuth(
     if (pathname === "/" && !token && !isAdminHost && !hostContext.portalPath) {
       return hostContext.isTenantHost
         ? NextResponse.redirect(new URL(LOGIN_PATH, request.url))
-        : passThrough(request);
+        : NextResponse.next();
     }
 
     const normalizedCompanySlug = token?.companySlug?.trim().toLowerCase();
@@ -446,7 +419,7 @@ const nextAuthProxy = withAuth(
         if (!hasOperatorCookie) {
           return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
         }
-        return passThrough(request);
+        return NextResponse.next();
       }
 
       if (pathname === LOGIN_PATH) {
@@ -454,7 +427,7 @@ const nextAuthProxy = withAuth(
       }
 
       if (isPathWithinRoute(pathname, ADMIN_LOGIN_PATH)) {
-        return passThrough(request);
+        return NextResponse.next();
       }
 
       const canonicalAdminPath = toExternalAdminPath(pathname);
@@ -469,7 +442,7 @@ const nextAuthProxy = withAuth(
         }
         const rewriteUrl = request.nextUrl.clone();
         rewriteUrl.pathname = internalAdminPath;
-        return rewriteTo(request, rewriteUrl);
+        return NextResponse.rewrite(rewriteUrl);
       }
 
       return redirectToPath(request, ADMIN_BASE_PATH);
@@ -521,7 +494,7 @@ const nextAuthProxy = withAuth(
         const internal = (path: string) => {
           const rewriteUrl = request.nextUrl.clone();
           rewriteUrl.pathname = getPortalInternalPathForPublicPath(path, portalDescriptor);
-          return rewriteTo(request, rewriteUrl);
+          return NextResponse.rewrite(rewriteUrl);
         };
         if (POS_DEVICE_PATHS.has(pathname)) {
           const response = internal(pathname);
@@ -553,7 +526,7 @@ const nextAuthProxy = withAuth(
 
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname = getPortalInternalPathForPublicPath(pathname, portalDescriptor);
-      return rewriteTo(request, rewriteUrl);
+      return NextResponse.rewrite(rewriteUrl);
     }
 
     if (!isApiRequest && portalBasePath && !token) {
@@ -576,15 +549,15 @@ const nextAuthProxy = withAuth(
     }
 
     if (!isApiRequest && portalBasePath && pathname === `${portalBasePath}/login`) {
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     if (pathname === LOGIN_PATH) {
       if (!hostContext.strictTenantEnforcement) {
-        return passThrough(request);
+        return NextResponse.next();
       }
       if (!hostContext.isCentralHost) {
-        return passThrough(request);
+        return NextResponse.next();
       }
       if (hostContext.isCentralHost && normalizedCompanySlug) {
         return redirectToTenantHost(request, normalizedCompanySlug);
@@ -678,7 +651,7 @@ const nextAuthProxy = withAuth(
       if (!apiFeatureDecision.allowed) {
         return denyFeature(request, apiFeatureDecision);
       }
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     if (tenantHostEnforcementEnabled && hostContext.strictTenantEnforcement && hostContext.isCentralHost && normalizedCompanySlug) {
@@ -690,7 +663,7 @@ const nextAuthProxy = withAuth(
       if (!pageFeatureDecision.allowed) {
         return denyPageFeature(request, token?.role, pageFeatureDecision);
       }
-      return passThrough(request);
+      return NextResponse.next();
     }
 
     if (!token?.companyId) {
@@ -711,7 +684,7 @@ const nextAuthProxy = withAuth(
       return denyPageFeature(request, token?.role, pageFeatureDecision);
     }
 
-    return passThrough(request);
+    return NextResponse.next();
   },
   {
     callbacks: {
@@ -768,33 +741,6 @@ const nextAuthProxy = withAuth(
     },
   }
 );
-
-export default async function proxy(request: NextRequestWithAuth, event: NextFetchEvent) {
-  const { headers } = await authkit(request);
-  // Built once for its response headers: this drops the pending-sign-in cookie
-  // AuthKit prepares for a signed-out visitor, so not every page sets one.
-  const authkitResponse = handleAuthkitProxy(request, headers);
-
-  const { pathname } = request.nextUrl;
-  // Starting and finishing an AuthKit sign-in has no NextAuth session or
-  // tenant to check yet, the same as /login.
-  if (pathname === AUTHKIT_SIGN_IN_PATH || pathname === AUTHKIT_CALLBACK_PATH) {
-    return authkitResponse;
-  }
-
-  authkitRequestHeaders.set(request, partitionAuthkitHeaders(request, headers).requestHeaders);
-  // NextAuth answers nothing for its own sign-in page, which still needs AuthKit's headers.
-  const response = (await nextAuthProxy(request, event)) ?? authkitResponse;
-  if (response !== authkitResponse) {
-    // AuthKit's refreshed session cookie and cache headers; not Next's internal `x-middleware-*` ones.
-    for (const [name, value] of authkitResponse.headers) {
-      if (name.startsWith("x-middleware-")) continue;
-      if (name === "set-cookie") response.headers.append(name, value);
-      else if (!response.headers.has(name)) response.headers.set(name, value);
-    }
-  }
-  return response;
-}
 
 export const config = {
   matcher: [

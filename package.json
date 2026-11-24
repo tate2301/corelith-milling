@@ -116,8 +116,6 @@
     "@visx/text": "^3.12.0",
     "@visx/tooltip": "^3.12.0",
     "@visx/xychart": "^3.12.0",
-    "@workos-inc/authkit-nextjs": "^4.6.3",
-    "@workos-inc/node": "^12.2.0",
     "bcryptjs": "^3.0.3",
     "bwip-js": "^4.11.4",
     "class-variance-authority": "^0.7.1",
