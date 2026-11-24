@@ -7,7 +7,7 @@ export const GET = millRoute(null, async ({ companyId }, request) => {
   const id = params.get("id");
   const status = params.get("status") ?? "HOLD";
   const lots = await prisma.millingLot.findMany({
-    where: { companyId, ...(id ? { id } : { status }), originType: { in: ["BATCH", "RETURN", "INTAKE"] } },
+    where: { companyId, ...(id ? { id } : { status, originType: { in: ["BATCH", "RETURN", "INTAKE"] } }) },
     orderBy: { producedAt: "asc" },
     include: { balances: true },
     take: 200,

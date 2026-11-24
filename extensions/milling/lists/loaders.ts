@@ -809,6 +809,40 @@ const routeStops: ReportLoader = {
   },
 };
 
+const QC_METHOD: Record<string, string> = { VISUAL: "Visual", INSTRUMENT: "Instrument", EXTERNAL_LAB: "External lab", NOT_PERFORMED: "Not performed" };
+
+/** A delivery's or a lot's test results, every test, newest first. */
+const qcResults: ReportLoader = {
+  load: async (ctx, params) => {
+    const targetId = params.intake ?? params.lot;
+    if (!targetId) return result([]);
+    const inspections = await prisma.millingQcInspection.findMany({
+      where: { companyId: ctx.companyId, targetType: params.intake ? "MillingIntake" : "MillingLot", targetId },
+      orderBy: { inspectedAt: "desc" },
+      include: { results: true },
+    });
+    const specs = await prisma.millingQcSpec.findMany({ where: { companyId: ctx.companyId, id: { in: inspections.flatMap((row) => row.results.map((r) => r.specId)) } }, select: { id: true, unit: true, minValue: true, maxValue: true } });
+    return result(
+      inspections.flatMap((inspection) =>
+        inspection.results.map((row): ReportRow => {
+          const spec = specs.find((entry) => entry.id === row.specId);
+          const unit = spec?.unit ?? "";
+          return {
+            id: row.id,
+            targetId,
+            check: row.specName,
+            method: QC_METHOD[row.method] ?? row.method,
+            reading: row.value === null ? null : `${Number(row.value)}${unit}`,
+            limit: spec?.maxValue !== null && spec?.maxValue !== undefined ? `${spec.minValue !== null ? `${Number(spec.minValue)}–` : "≤ "}${Number(spec.maxValue)}${unit}` : null,
+            result: row.method === "NOT_PERFORMED" ? "Not performed" : row.passed === false ? "Failed" : "Passed",
+            inspectedAt: isoDay(inspection.inspectedAt),
+          };
+        }),
+      ),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -829,6 +863,7 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-customer-invoices": customerInvoices,
   "milling-customer-despatches": customerDespatches,
   "milling-route-stops": routeStops,
+  "milling-qc-results": qcResults,
   "milling-seller-list": sellers,
   "milling-seller-trip-list": sellerTrips,
   "milling-seller-commission-list": sellerCommission,

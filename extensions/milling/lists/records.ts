@@ -123,3 +123,28 @@ const recordSource = (key: string, title: string, list: ListSpec, sort: string, 
 export const CUSTOMER_INVOICES_LIST = recordSource("milling-customer-invoices", "Customer invoices", invoices, "due", "asc");
 export const CUSTOMER_DESPATCHES_LIST = recordSource("milling-customer-despatches", "Customer despatches", customerDespatches, "date", "desc");
 export const ROUTE_STOPS_LIST = recordSource("milling-route-stops", "Route stops", routeStops, "stop", "asc");
+
+/** A delivery's or a lot's test results (QT-A2): each check, how it was done, the reading against the limit, and the outcome. */
+const results: ListSpec = {
+  noun: "results",
+  read: MILL_VIEW,
+  search: { placeholder: "Search results", keys: ["check"] },
+  filters: [
+    { key: "intake", type: "parent", column: "targetId" },
+    { key: "lot", type: "parent", column: "targetId" },
+  ],
+  sorts: [{ key: "newest", label: "Newest test first", rules: [{ column: "inspectedAt", dir: "desc" }] }],
+  columns: [
+    { key: "check", label: "Check", kind: "text", cell: "text", strong: true, width: "minmax(180px,1.4fr)", align: "start", priority: 1 },
+    { key: "method", label: "How", kind: "text", cell: "muted", width: "130px", align: "start", priority: 2 },
+    { key: "reading", label: "Reading", kind: "text", cell: "mono", empty: "dash", width: "120px", align: "end", priority: 1 },
+    { key: "limit", label: "Limit", kind: "text", cell: "muted", width: "120px", align: "end", priority: 2 },
+    { key: "result", label: "Result", kind: "status", cell: "state", tones: { Passed: "ok", Failed: "bad", "Not performed": "warn" }, width: "130px", align: "start", priority: 1 },
+    { key: "inspectedAt", label: "Tested", kind: "date", cell: "date", dayFormat: "relative", width: "120px", align: "end", priority: 3 },
+  ],
+  rowHref: "/milling/quality",
+  card: { title: "check", badge: "result", figure: "reading", meta: "{method}" },
+  empty: { icon: "Flask", title: "Not tested yet", line: "Take the sample to test it against the spec." },
+};
+
+export const QC_RESULTS_LIST = recordSource("milling-qc-results", "Test results", results, "inspectedAt", "desc");
