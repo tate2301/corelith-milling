@@ -209,6 +209,8 @@ export const milling: CorelithExtension = {
     ],
     additions: [
       { into: "stock", id: "milling.lots", label: "Lots and bins", icon: "stockroom", href: "/milling/stock" },
+      { into: "stock", id: "milling.lot-movements", label: "Lot movements", icon: "activity", href: "/milling/stock/movements" },
+      { into: "stock", id: "milling.lot-counts", label: "Lot counts", icon: "checks", href: "/milling/stock/counts" },
       // Gate sales (NV02, GT): core's till and its price lists, beside core's sales and cash-ups.
       { into: "tender", id: "milling.till", label: "Till", icon: "receipt", href: "/milling/gate-till" },
       { into: "tender", id: "milling.price-lists", label: "Price lists", icon: "price-list", href: "/milling/price-lists" },

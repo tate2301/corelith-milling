@@ -4,7 +4,9 @@ import type { ReportLoader, ReportRow } from "@/lib/reports/types";
 
 import { targetHref } from "@/components/milling/targets";
 import { listRoutes, listTrips, vehicleLabels } from "@/lib/milling/distribution/trips";
+import { followWorkshop } from "@/lib/milling/maintenance/equipment";
 import { checkWeightSummary } from "@/lib/milling/production/packing";
+import { millSite, stockOnHand } from "@/lib/milling/stock/views";
 import { commissionStatement } from "@/lib/milling/books/commission-statement";
 import { balancesOf, collections, listVisits } from "@/lib/milling/customers/customers";
 import { routeDetail } from "@/lib/milling/distribution/trips";
@@ -974,6 +976,171 @@ const shiftCrew: ReportLoader = {
   },
 };
 
+const MACHINE_STATE: Record<string, string> = { AVAILABLE: "Available", DOWN: "Down", IN_REPAIR: "In repair", AWAITING_RELEASE: "To release" };
+
+/** Maintenance › Machine release: every machine at the mill, its state and its open stop. */
+const machines: ReportLoader = {
+  load: async (ctx) => {
+    const site = await millSite(prisma, ctx.companyId);
+    if (!site) return result([]);
+    await followWorkshop(prisma, ctx.companyId);
+    const [equipment, states, open] = await Promise.all([
+      prisma.equipment.findMany({ where: { siteId: site.id, isActive: true }, select: { id: true, equipmentCode: true, name: true, category: true }, orderBy: { equipmentCode: "asc" } }),
+      prisma.millingEquipmentState.findMany({ where: { companyId: ctx.companyId } }),
+      prisma.millingDowntime.findMany({ where: { companyId: ctx.companyId, endedAt: null } }),
+    ]);
+    return result(
+      equipment.map((row): ReportRow => {
+        const key = states.find((state) => state.equipmentId === row.id)?.availability ?? "AVAILABLE";
+        const stop = open.find((entry) => entry.equipmentId === row.id);
+        return {
+          id: row.id,
+          code: row.equipmentCode,
+          name: row.name,
+          category: row.category ? row.category.charAt(0) + row.category.slice(1).toLowerCase().replace(/_/g, " ") : null,
+          stateKey: key,
+          state: MACHINE_STATE[key] ?? key,
+          stop: stop?.cause ?? null,
+          since: stop ? dayAndTime(stop.startedAt) : null,
+        };
+      }),
+    );
+  },
+  options: async (ctx) => {
+    const site = await millSite(prisma, ctx.companyId);
+    const rows = site ? await prisma.equipment.findMany({ where: { siteId: site.id, isActive: true }, select: { category: true }, distinct: ["category"] }) : [];
+    return { category: distinct(rows.map((row) => (row.category ? row.category.charAt(0) + row.category.slice(1).toLowerCase().replace(/_/g, " ") : null))) };
+  },
+};
+
+const UNIT: Record<string, string> = { KILOGRAM: "kg", TONNE: "t", BAG: "bags", EACH: "each", LITRE: "L" };
+
+/** Stores › Lots and bins: a row for each lot in each place it is kept. */
+const lots: ReportLoader = {
+  load: async (ctx) => {
+    const { products } = await stockOnHand(prisma, ctx.companyId);
+    return result(
+      products.flatMap((product) =>
+        product.lots.flatMap((lot) =>
+          lot.balances.map(
+            (balance): ReportRow => ({
+              id: `${lot.id}~${balance.stockLocationId}`,
+              lotId: lot.id,
+              code: lot.code,
+              product: product.name,
+              category: product.category,
+              place: balance.location,
+              stateKey: lot.status,
+              state: LOT_STATE[lot.status] ?? lot.status,
+              onHand: balance.quantity,
+              unit: UNIT[product.unit] ?? "",
+              reserved: balance.reserved || null,
+              free: Math.max(0, balance.quantity - balance.reserved),
+              made: isoDay(lot.producedAt),
+              producedAt: new Date(lot.producedAt).toISOString(),
+            }),
+          ),
+        ),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const { products } = await stockOnHand(prisma, ctx.companyId);
+    return {
+      product: distinct(products.filter((product) => product.lots.length).map((product) => product.name)),
+      place: distinct(products.flatMap((product) => product.lots.flatMap((lot) => lot.balances.map((balance) => balance.location)))),
+      category: distinct(products.map((product) => product.category)),
+    };
+  },
+};
+
+const MOVE_REASON: Record<string, string> = {
+  RECEIPT: "Received",
+  TRANSFER: "Moved",
+  PRODUCTION_ISSUE: "Into a run",
+  PRODUCTION_OUTPUT: "Out of a run",
+  PACK_ISSUE: "Into packing",
+  PACK_OUTPUT: "Packed",
+  DESPATCH: "Despatched",
+  DELIVERY_RETURN: "Returned",
+  COUNT_ADJUSTMENT: "Counted",
+  QC_DISPOSAL: "Disposed of",
+  SELLER_SALE: "Sold by a seller",
+  GATE_SALE: "Sold at the gate",
+  OPENING: "Opening stock",
+};
+
+/** Stores › Lot movements: every movement of every lot, or of one lot. */
+const lotMovements: ReportLoader = {
+  load: async (ctx, params) => {
+    const rows = await prisma.millingLotMovement.findMany({
+      where: { companyId: ctx.companyId, ...(params.lot ? { lotId: params.lot } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: 5000,
+      include: { lot: { select: { code: true, productId: true } } },
+    });
+    const [places, products, names] = await Promise.all([
+      locationCodes(ctx.companyId),
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: [...new Set(rows.map((row) => row.lot.productId))] } }, select: { id: true, name: true } }),
+      userNames(ctx.companyId, rows.map((row) => row.createdById)),
+    ]);
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          lotId: row.lotId,
+          lot: row.lot.code,
+          product: products.find((product) => product.id === row.lot.productId)?.name ?? null,
+          reason: MOVE_REASON[row.reason] ?? row.reason.charAt(0) + row.reason.slice(1).toLowerCase().replace(/_/g, " "),
+          route: `${row.fromLocationId ? (places.get(row.fromLocationId) ?? "?") : "—"} → ${row.toLocationId ? (places.get(row.toLocationId) ?? "?") : "—"}`,
+          quantity: Number(row.quantity),
+          how: row.isEstimated ? "Estimated" : "Weighed",
+          by: names.get(row.createdById) ?? null,
+          when: dayAndTime(row.createdAt),
+          at: row.createdAt.toISOString(),
+          date: isoDay(row.createdAt),
+        }),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await prisma.millingLotMovement.findMany({ where: { companyId: ctx.companyId }, select: { reason: true }, distinct: ["reason"] });
+    return { reason: distinct(rows.map((row) => MOVE_REASON[row.reason] ?? row.reason.charAt(0) + row.reason.slice(1).toLowerCase().replace(/_/g, " "))) };
+  },
+  parentLabel: async (ctx, filters) => {
+    if (!filters.lot) return null;
+    const lot = await prisma.millingLot.findFirst({ where: { id: filters.lot, companyId: ctx.companyId }, select: { code: true } });
+    return lot ? `Movements of ${lot.code}` : null;
+  },
+};
+
+const COUNT_STATE: Record<string, string> = { POSTED: "Posted", AWAITING_DECISION: "Waiting for a decision", DISCARDED: "Discarded", OPEN: "Open" };
+
+/** Stores › Lot counts. */
+const lotCounts: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingStockCount.findMany({ where: { companyId: ctx.companyId }, orderBy: { countedAt: "desc" }, take: 2000, include: { lines: true } });
+    const places = await prisma.stockLocation.findMany({ where: { site: { companyId: ctx.companyId } }, select: { id: true, code: true, name: true } });
+    return result(
+      rows.map((row): ReportRow => {
+        const place = places.find((entry) => entry.id === row.stockLocationId);
+        const off = row.lines.filter((line) => Math.abs(Number(line.counted) - Number(line.expected)) > 0.0005).length;
+        return {
+          id: row.id,
+          code: row.code,
+          place: place ? `${place.code} · ${place.name}` : null,
+          when: dayAndTime(row.countedAt),
+          lots: row.lines.length,
+          off: off || null,
+          state: COUNT_STATE[row.status] ?? row.status,
+          countedAt: row.countedAt.toISOString(),
+          date: isoDay(row.countedAt),
+        };
+      }),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -999,6 +1166,10 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-run-maize": runMaize,
   "milling-run-outputs": runOutputs,
   "milling-plan-lines": planLines,
+  "milling-machine-list": machines,
+  "milling-lot-list": lots,
+  "milling-lot-movement-list": lotMovements,
+  "milling-lot-count-list": lotCounts,
   "milling-shift-crew": shiftCrew,
   "milling-seller-list": sellers,
   "milling-seller-trip-list": sellerTrips,
