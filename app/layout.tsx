@@ -26,7 +26,6 @@ import { cache, Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
 import { getServerSession } from "next-auth";
-import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import { AppProviders } from "@/components/providers/app-providers";
 import { AppShell } from "@/components/layout/app-shell";
 import { inter } from "@/components/core/fonts";
@@ -217,25 +216,20 @@ export default async function RootLayout({
       >
         <Analytics />
         <SpeedInsights />
-        {/* WorkOS AuthKit, beside NextAuth. Its expired-session check reloads
-            the page when a server action fails to fetch, which offline is every
-            one of them: a till must not reload because the network dropped. */}
-        <AuthKitProvider onSessionExpired={false}>
-          <div className="app-root">
-            <AppProviders session={session} product={product}>
-              <Suspense fallback={<div className="min-h-screen bg-background" />}>
-                <AppShell
-                  hostPortalPath={hostContext.portalPath}
-                  workspaceBrand={workspaceBrand}
-                  defaultPanelOpen={defaultPanelOpen}
-                  shopConditions={shopConditions}
-                >
-                  {children}
-                </AppShell>
-              </Suspense>
-            </AppProviders>
-          </div>
-        </AuthKitProvider>
+        <div className="app-root">
+          <AppProviders session={session} product={product}>
+            <Suspense fallback={<div className="min-h-screen bg-background" />}>
+              <AppShell
+                hostPortalPath={hostContext.portalPath}
+                workspaceBrand={workspaceBrand}
+                defaultPanelOpen={defaultPanelOpen}
+                shopConditions={shopConditions}
+              >
+                {children}
+              </AppShell>
+            </Suspense>
+          </AppProviders>
+        </div>
       </body>
     </html>
   );
