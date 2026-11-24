@@ -7,6 +7,7 @@ import { listRoutes, listTrips, vehicleLabels } from "@/lib/milling/distribution
 import { followWorkshop } from "@/lib/milling/maintenance/equipment";
 import { checkWeightSummary } from "@/lib/milling/production/packing";
 import { SETTINGS_RESOURCES } from "@/lib/milling/settings/fields";
+import { passingRule } from "@/lib/milling/settings/form";
 import { listSettings } from "@/lib/milling/settings/server";
 import { millSite, stockOnHand } from "@/lib/milling/stock/views";
 import { commissionStatement } from "@/lib/milling/books/commission-statement";
@@ -1171,6 +1172,9 @@ const settingsLoaders: Record<string, ReportLoader> = Object.fromEntries(
                         ? raw === null || raw === undefined ? null : Number(raw)
                         : raw === null || raw === undefined ? null : String(raw);
             }
+            // A recipe's bulk product reads as its name; a check's limits as one rule (lib/milling/settings/form.ts).
+            if (resource.key === "recipes" && row.bulk) out.bulkProductId = String(row.bulk);
+            if (resource.key === "qc-specs") out.passingRule = passingRule(row);
             return out;
           }),
         );

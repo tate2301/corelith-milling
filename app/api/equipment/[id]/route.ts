@@ -1,3 +1,4 @@
+import { linkMaintenanceVehicle } from "@/lib/milling/settings/vehicles";
 import { NextRequest, NextResponse } from "next/server"
 import { validateSession, successResponse, errorResponse } from "@/lib/api-utils"
 import { prisma } from "@/lib/prisma"

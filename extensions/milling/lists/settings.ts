@@ -25,8 +25,11 @@ export function nameField(resource: SettingsResource): SettingsField {
   return resource.fields.find((field) => field.type === "text" && field.key !== "code") ?? resource.fields[0]!;
 }
 
+/** Columns a list leaves to the sheet: a check's limits read as one passing rule instead. */
+const HIDDEN: Partial<Record<string, string[]>> = { "qc-specs": ["unit", "minValue", "maxValue", "version", "code"] };
+
 function spec(resource: SettingsResource): ListSpec {
-  const shown = resource.fields.filter((field) => !field.formOnly);
+  const shown = resource.fields.filter((field) => !field.formOnly && !(HIDDEN[resource.key] ?? []).includes(field.key));
   const name = nameField(resource);
   const ordered = [name, ...shown.filter((field) => field !== name)];
   const sheet = `mill-setting-${resource.key}`;
@@ -37,7 +40,10 @@ function spec(resource: SettingsResource): ListSpec {
     search: { placeholder: `Search ${resource.label.toLowerCase()}`, keys: ordered.filter((field) => field.type === "text" || field.type === "select").map((field) => field.key) },
     filters: [],
     sorts: [{ key: "name", label: "Name A–Z", rules: [{ column: name.key, dir: "asc" }] }],
-    columns: ordered.map((field, index) => column(field, index === 0)),
+    columns: [
+      ...ordered.map((field, index) => column(field, index === 0)),
+      ...(resource.key === "qc-specs" ? [{ key: "passingRule", label: "Passing rule", kind: "text" as const, cell: "muted" as const, width: "minmax(200px,1.4fr)", align: "start" as const, priority: 2 as const }] : []),
+    ],
     rowHref: `/milling/settings/${resource.key}?sheet=${sheet}&id={id}`,
     rowMenu: [{ key: "edit", label: "Change", requires: mill("settings.manage"), do: { sheet } }],
     bulk: [{ key: "export" }],

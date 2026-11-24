@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
 import { writePlatformAuditEvent } from "@/lib/audit/platform";
@@ -10,6 +10,8 @@ import {
   type SettingsResource,
   type SettingsResourceKey,
 } from "./fields";
+
+type SettingsDb = PrismaClient | Prisma.TransactionClient;
 
 export class MillSettingsError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -32,7 +34,9 @@ function fieldSchema(field: SettingsField): z.ZodTypeAny {
       let schema = z.coerce.number({ error: `${field.label} must be a number.` });
       if (field.min !== undefined) schema = schema.min(field.min, `${field.label} is at least ${field.min}.`);
       if (field.max !== undefined) schema = schema.max(field.max, `${field.label} is at most ${field.max}.`);
-      return field.required ? schema : z.preprocess((value) => (value === "" ? null : value), schema.nullable());
+      return field.required
+        ? z.preprocess((value) => typeof value === "string" && !value.trim() ? undefined : value, schema)
+        : z.preprocess((value) => (typeof value === "string" && !value.trim() ? null : value), schema.nullable());
     }
     case "boolean":
       return z.boolean();
@@ -47,7 +51,7 @@ function fieldSchema(field: SettingsField): z.ZodTypeAny {
     case "select": {
       const base = field.options?.length
         ? z.enum(field.options.map((option) => option.value) as [string, ...string[]])
-        : z.string().trim().min(1);
+        : z.string().trim().min(1, `${field.label} is needed.`);
       return field.required ? base : z.preprocess((value) => (value === "" ? null : value), base.nullable());
     }
     case "text": {
@@ -89,7 +93,7 @@ function resourceOrThrow(key: string): SettingsResource {
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 
-export async function listSettings(db: PrismaClient, companyId: string, key: string): Promise<SettingsList> {
+export async function listSettings(db: SettingsDb, companyId: string, key: string): Promise<SettingsList> {
   const resource = resourceOrThrow(key);
   const where = { companyId };
   switch (resource.key) {
@@ -117,45 +121,39 @@ export async function listSettings(db: PrismaClient, companyId: string, key: str
     case "locations": {
       const profiles = await db.millingLocationProfile.findMany({ where });
       const locations = await db.stockLocation.findMany({
-        where: { id: { in: profiles.map((row) => row.stockLocationId) }, site: { companyId } },
-        select: { id: true, code: true, name: true, sortOrder: true },
+        where: { site: { companyId, isActive: true }, isActive: true },
+        select: { id: true, code: true, name: true, sortOrder: true, site: { select: { name: true } } },
       });
-      const byId = new Map(locations.map((location) => [location.id, location]));
       return {
-        rows: profiles
-          .filter((row) => byId.has(row.stockLocationId))
-          .sort((a, b) => byId.get(a.stockLocationId)!.sortOrder - byId.get(b.stockLocationId)!.sortOrder)
-          .map((row) => {
-            const location = byId.get(row.stockLocationId)!;
-            return { id: row.id, location: `${location.code} · ${location.name}`, kind: row.kind, capacityKg: num(row.capacityKg) };
+        rows: locations
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((location) => {
+            const profile = profiles.find((row) => row.stockLocationId === location.id);
+            return { id: profile?.id ?? location.id, location: `${location.site.name} · ${location.code} · ${location.name}`, kind: profile?.kind ?? "STORE", capacityKg: num(profile?.capacityKg) };
           }),
-        options: {},
+        options: { siteId: (await db.site.findMany({ where: { companyId, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } })).map((site) => ({ value: site.id, label: site.name })) },
       };
     }
     case "vehicles": {
       const profiles = await db.millingVehicleProfile.findMany({ where });
       const [vehicles, drivers] = await Promise.all([
         db.equipment.findMany({
-          where: { id: { in: profiles.map((row) => row.equipmentId) }, site: { companyId } },
-          select: { id: true, equipmentCode: true, name: true },
+          where: { category: "VEHICLE", isActive: true, site: { companyId, isActive: true } },
+          select: { id: true, equipmentCode: true, name: true, registrationNumber: true },
         }),
         db.user.findMany({ where: { companyId, isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
       ]);
-      const byId = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
       return {
-        rows: profiles
-          .filter((row) => byId.has(row.equipmentId))
-          .map((row) => {
-            const vehicle = byId.get(row.equipmentId)!;
-            return {
-              id: row.id,
-              vehicle: `${vehicle.equipmentCode} · ${vehicle.name}`,
-              registrationNumber: row.registrationNumber,
-              capacityKg: num(row.capacityKg),
-              driverUserId: row.driverUserId,
-            };
-          })
-          .sort((a, b) => String(a.vehicle).localeCompare(String(b.vehicle))),
+        rows: vehicles.map((vehicle) => {
+          const profile = profiles.find((row) => row.equipmentId === vehicle.id);
+          return {
+            id: profile?.id ?? vehicle.id,
+            vehicle: `${vehicle.equipmentCode} · ${vehicle.name}`,
+            registrationNumber: profile?.registrationNumber ?? vehicle.registrationNumber,
+            capacityKg: num(profile?.capacityKg),
+            driverUserId: profile?.driverUserId ?? null,
+          };
+        }).sort((a, b) => a.vehicle.localeCompare(b.vehicle)),
         options: { driverUserId: drivers.map((driver) => ({ value: driver.id, label: driver.name })) },
       };
     }
@@ -163,7 +161,7 @@ export async function listSettings(db: PrismaClient, companyId: string, key: str
       const recipes = await db.millingPackRecipe.findMany({ where });
       const products = await db.product.findMany({
         where: { companyId },
-        select: { id: true, code: true, name: true, unit: true },
+        select: { id: true, code: true, name: true, unit: true, isActive: true, archivedAt: true },
         orderBy: { name: "asc" },
       });
       const byId = new Map(products.map((product) => [product.id, product]));
@@ -172,6 +170,8 @@ export async function listSettings(db: PrismaClient, companyId: string, key: str
           .filter((row) => byId.has(row.packedProductId))
           .map((row) => ({
             id: row.id,
+            packedProductId: row.packedProductId,
+            bulkProductId: row.bulkProductId,
             packed: byId.get(row.packedProductId)!.name,
             bulk: byId.get(row.bulkProductId)?.name ?? "(product removed)",
             kgPerBag: num(row.kgPerBag),
@@ -181,8 +181,10 @@ export async function listSettings(db: PrismaClient, companyId: string, key: str
           }))
           .sort((a, b) => String(a.packed).localeCompare(String(b.packed))),
         options: {
+          packedProductId: products.filter((product) => product.isActive && !product.archivedAt && product.unit === "BAG").map((product) => ({ value: product.id, label: `${product.code} · ${product.name}` })),
+          bulkProductId: products.filter((product) => product.isActive && !product.archivedAt && product.unit === "KILOGRAM").map((product) => ({ value: product.id, label: `${product.code} · ${product.name}` })),
           bagProductId: products
-            .filter((product) => product.unit === "EACH")
+            .filter((product) => product.isActive && !product.archivedAt && product.unit === "EACH")
             .map((product) => ({ value: product.id, label: `${product.code} · ${product.name}` })),
         },
       };
@@ -191,7 +193,7 @@ export async function listSettings(db: PrismaClient, companyId: string, key: str
 }
 
 /** A choice from the workspace must be one the list offered. */
-async function checkOptions(db: PrismaClient, companyId: string, key: SettingsResourceKey, data: Record<string, unknown>) {
+async function checkOptions(db: SettingsDb, companyId: string, key: SettingsResourceKey, data: Record<string, unknown>) {
   const { options } = await listSettings(db, companyId, key);
   for (const [field, choices] of Object.entries(options)) {
     const value = data[field];
@@ -201,7 +203,7 @@ async function checkOptions(db: PrismaClient, companyId: string, key: SettingsRe
 }
 
 async function audit(
-  db: PrismaClient,
+  db: SettingsDb,
   args: { companyId: string; actorId: string; key: string; id: string; action: "added" | "changed"; before?: unknown; after: unknown },
 ) {
   await writePlatformAuditEvent(
@@ -226,22 +228,64 @@ export async function createSetting(
   args: { companyId: string; actorId: string; key: string; body: unknown },
 ): Promise<SettingsRow> {
   const resource = resourceOrThrow(args.key);
-  if (!resource.canCreate) throw new MillSettingsError(`${resource.label} are added elsewhere; edit them here.`);
+  if (!resource.canCreate) throw new MillSettingsError(`${resource.label} are added in Maintenance; edit their delivery details here.`);
   const data = { ...parseSettings(resource.fields, "create", args.body), companyId: args.companyId };
   try {
-    const row = await createRow(db, resource.key, data);
-    await audit(db, { companyId: args.companyId, actorId: args.actorId, key: resource.key, id: row.id, action: "added", after: data });
-    return row;
+    return await db.$transaction(async (tx) => {
+      await checkOptions(tx, args.companyId, resource.key, data);
+      if (resource.key === "qc-specs") validateQcRule(data);
+      if (resource.key === "recipes") await validateRecipe(tx, args.companyId, data);
+      const row = await createRow(tx, resource.key, data);
+      await audit(tx, { companyId: args.companyId, actorId: args.actorId, key: resource.key, id: row.id, action: "added", after: data });
+      return row;
+    });
   } catch (error) {
-    if (isUniqueViolation(error)) throw new MillSettingsError("That code is already used.");
+    if (isUniqueViolation(error)) throw new MillSettingsError("That code or packed-product recipe is already used.");
     throw error;
   }
 }
 
-async function createRow(db: PrismaClient, key: SettingsResourceKey, data: Record<string, unknown>): Promise<SettingsRow> {
+/** Numeric checks need at least one inclusive passing limit; pass/fail checks have no numeric limits. */
+function validateQcRule(data: Record<string, unknown>) {
+  if (data.resultType === "PASS_FAIL") {
+    if (!String(data.guidance ?? "").trim()) throw new MillSettingsError("Describe what a pass looks like for a pass/fail check.");
+    data.minValue = null;
+    data.maxValue = null;
+    data.unit = null;
+    return;
+  }
+  if (data.resultType !== "NUMERIC") throw new MillSettingsError("Choose Pass or fail or Numeric reading.");
+  if (data.minValue == null && data.maxValue == null) throw new MillSettingsError("A numeric check needs a minimum or maximum passing reading.");
+  if (data.minValue != null && data.maxValue != null && Number(data.minValue) > Number(data.maxValue)) {
+    throw new MillSettingsError("The minimum passing reading cannot be greater than the maximum.");
+  }
+}
+
+async function validateRecipe(db: SettingsDb, companyId: string, data: Record<string, unknown>) {
+  const packed = await db.product.findFirst({ where: { id: String(data.packedProductId), companyId, isActive: true, archivedAt: null, unit: "BAG" } });
+  const bulk = await db.product.findFirst({ where: { id: String(data.bulkProductId), companyId, isActive: true, archivedAt: null, unit: "KILOGRAM" } });
+  if (!packed || !bulk) throw new MillSettingsError("Choose your active packed product in bags and bulk product in kilograms.");
+  if (data.bagProductId) {
+    const bag = await db.product.findFirst({ where: { id: String(data.bagProductId), companyId, isActive: true, archivedAt: null, unit: "EACH" } });
+    if (!bag) throw new MillSettingsError("Choose an active empty-bag product from this workspace.");
+  }
+  if (Number(data.threadPerBag) > 0 && !await db.product.findFirst({ where: { companyId, code: "THREAD", isActive: true, archivedAt: null } })) {
+    throw new MillSettingsError("Add an active sewing-thread product with code THREAD before setting thread per bag.");
+  }
+}
+
+async function createRow(db: SettingsDb, key: SettingsResourceKey, data: Record<string, unknown>): Promise<SettingsRow> {
   // The schema built from the fields has already shaped `data` for its table.
   const anyData = data as never;
   switch (key) {
+    case "locations": {
+      const site = await db.site.findFirst({ where: { id: String(data.siteId), companyId: String(data.companyId), isActive: true }, select: { id: true } });
+      if (!site) throw new MillSettingsError("Choose an active site in this workspace.");
+      const location = await db.stockLocation.create({ data: { siteId: site.id, code: String(data.code), name: String(data.name) } });
+      return db.millingLocationProfile.create({ data: { companyId: String(data.companyId), stockLocationId: location.id, kind: String(data.kind), capacityKg: data.capacityKg as number | null | undefined } });
+    }
+    case "recipes":
+      return db.millingPackRecipe.create({ data: anyData });
     case "stages":
       return db.millingProcessStage.create({ data: anyData });
     case "qc-specs":
@@ -262,14 +306,38 @@ export async function updateSetting(
   db: PrismaClient,
   args: { companyId: string; actorId: string; key: string; id: string; body: unknown },
 ): Promise<SettingsRow> {
+  try {
+    return await db.$transaction((tx) => updateSettingInTransaction(tx, args));
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new MillSettingsError("That code or packed-product recipe is already used.");
+    throw error;
+  }
+}
+
+async function updateSettingInTransaction(
+  db: SettingsDb,
+  args: { companyId: string; actorId: string; key: string; id: string; body: unknown },
+): Promise<SettingsRow> {
   const resource = resourceOrThrow(args.key);
   const data = parseSettings(resource.fields, "update", args.body);
-  await checkOptions(db, args.companyId, resource.key, data);
   const where = { id: args.id, companyId: args.companyId };
   const anyData = data as never;
 
   const before = await findRow(db, resource.key, where);
   if (!before) throw new MillSettingsError("Not found.", 404);
+  // An old recipe can be switched off even if a referenced product was archived.
+  // New/changed references must still come from the active workspace choices.
+  const choicesToCheck = resource.key === "recipes"
+    ? Object.fromEntries(Object.entries(data).filter(([key, value]) => String(value ?? "") !== String((before as Record<string, unknown>)[key] ?? "")))
+    : data;
+  await checkOptions(db, args.companyId, resource.key, choicesToCheck);
+  if (resource.key === "qc-specs") {
+    const effective: Record<string, unknown> = { ...before, ...data };
+    validateQcRule(effective);
+    // Drop obsolete numeric rules when switching to pass/fail, including on partial API updates.
+    if (effective.resultType === "PASS_FAIL") Object.assign(data, { unit: null, minValue: null, maxValue: null });
+  }
+  if (resource.key === "recipes" && (data.isActive ?? (before as { isActive: boolean }).isActive) !== false) await validateRecipe(db, args.companyId, { ...before, ...data });
 
   let after: SettingsRow;
   switch (resource.key) {
@@ -293,20 +361,28 @@ export async function updateSetting(
       after = await db.millingShiftDuty.update({ where: { id: args.id }, data: anyData });
       break;
     case "locations":
-      after = await db.millingLocationProfile.update({ where: { id: args.id }, data: anyData });
+      after = await db.millingLocationProfile.upsert({
+        where: { stockLocationId: (before as { stockLocationId: string }).stockLocationId },
+        create: { companyId: args.companyId, stockLocationId: (before as { stockLocationId: string }).stockLocationId, kind: "STORE", ...(data as object) },
+        update: anyData,
+      });
       break;
     case "vehicles":
-      after = await db.millingVehicleProfile.update({ where: { id: args.id }, data: anyData });
+      after = await db.millingVehicleProfile.upsert({
+        where: { equipmentId: (before as { equipmentId: string }).equipmentId },
+        create: { companyId: args.companyId, equipmentId: (before as { equipmentId: string }).equipmentId, ...(data as object) },
+        update: anyData,
+      });
       break;
     case "recipes":
       after = await db.millingPackRecipe.update({ where: { id: args.id }, data: anyData });
       break;
   }
-  await audit(db, { companyId: args.companyId, actorId: args.actorId, key: resource.key, id: args.id, action: "changed", before, after: data });
+  await audit(db, { companyId: args.companyId, actorId: args.actorId, key: resource.key, id: after.id, action: "changed", before, after: data });
   return after;
 }
 
-async function findRow(db: PrismaClient, key: SettingsResourceKey, where: { id: string; companyId: string }) {
+async function findRow(db: SettingsDb, key: SettingsResourceKey, where: { id: string; companyId: string }) {
   switch (key) {
     case "stages":
       return db.millingProcessStage.findFirst({ where });
@@ -316,10 +392,16 @@ async function findRow(db: PrismaClient, key: SettingsResourceKey, where: { id: 
       return db.millingDestination.findFirst({ where });
     case "duties":
       return db.millingShiftDuty.findFirst({ where });
-    case "locations":
-      return db.millingLocationProfile.findFirst({ where });
-    case "vehicles":
-      return db.millingVehicleProfile.findFirst({ where });
+    case "locations": {
+      const profile = await db.millingLocationProfile.findFirst({ where });
+      const location = await db.stockLocation.findFirst({ where: { id: profile?.stockLocationId ?? where.id, site: { companyId: where.companyId, isActive: true }, isActive: true } });
+      return location ? profile ?? { id: location.id, stockLocationId: location.id } : null;
+    }
+    case "vehicles": {
+      const profile = await db.millingVehicleProfile.findFirst({ where });
+      const vehicle = await db.equipment.findFirst({ where: { id: profile?.equipmentId ?? where.id, site: { companyId: where.companyId, isActive: true }, category: "VEHICLE", isActive: true } });
+      return vehicle ? profile ?? { id: vehicle.id, equipmentId: vehicle.id } : null;
+    }
     case "recipes":
       return db.millingPackRecipe.findFirst({ where });
   }

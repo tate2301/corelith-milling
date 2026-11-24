@@ -11,6 +11,12 @@ const NONE = "None";
 const optionsOf = (field: SettingsField, values: SheetValues): Option[] => (field.options as Option[] | undefined) ?? ((values._options as Record<string, Option[]> | undefined) ?? {})[field.key] ?? [];
 
 /** A mill setting as a workspace field: numbers right-aligned in mono, choices as selects. */
+export /** A quality check's result type as chosen in the sheet: the select holds labels. */
+const resultTypeOf = (values: SheetValues) => {
+  const field = SETTINGS_RESOURCES.find((resource) => resource.key === "qc-specs")?.fields.find((entry) => entry.key === "resultType");
+  return field ? (optionsOf(field, values).find((option) => option.label === values.resultType)?.value ?? null) : null;
+};
+
 export function fieldSpec(field: SettingsField): FieldSpec {
   const common = {
     id: field.key,
@@ -18,8 +24,10 @@ export function fieldSpec(field: SettingsField): FieldSpec {
     h: field.help,
     opt: !field.required,
     readWhen: (values: SheetValues) => field.readOnly === true || (field.createOnly === true && Boolean(values._editing)),
-    // A read-only value (a version, the core record's name) has nothing to show until there is a row.
-    ...(field.readOnly ? { show: (values: SheetValues) => Boolean(values._editing) } : {}),
+    // Shown only where it means something (lib/milling/settings/form.ts): a read-only value once there is a row,
+    // a create-only form field when adding, a numeric check's limits on a numeric check.
+    show: (values: SheetValues) =>
+      !(field.readOnly && !values._editing) && !(field.createOnly && field.formOnly && values._editing) && (!field.numericOnly || resultTypeOf(values) === "NUMERIC"),
   };
   switch (field.type) {
     case "boolean":
@@ -62,6 +70,17 @@ function fromForm(field: SettingsField, value: unknown, values: SheetValues): un
   return String(value ?? "").trim() || null;
 }
 
+/** A new quality check starts at intake, checked by eye, pass or fail (lib/milling/settings/form.ts). */
+const NEW_DEFAULTS: Partial<Record<string, Record<string, string>>> = { "qc-specs": { point: "INCOMING_MAIZE", method: "VISUAL", resultType: "PASS_FAIL" } };
+
+/** What each list asks of its sheet, in a line above the fields. */
+const GUIDES: Partial<Record<string, string>> = {
+  recipes: "Choose a packed product in bags, a bulk product in kilograms and, if used, the empty bag. Products are managed in Stores.",
+  locations: "A bin is a stock location of kind Bin. Sites are managed under Sites and sections.",
+  "qc-specs": "Pass or fail checks follow written instructions. Numeric readings pass within inclusive limits, for example moisture at most 12.5%.",
+  vehicles: "Vehicles are added in Assets, Machinery and vehicles, as a Vehicle; set their delivery capacity and usual driver here.",
+};
+
 /** Add or change one row of a mill setting, from its description in lib/milling/settings/fields.ts. */
 function kind(resource: SettingsResource): SheetKind {
   return {
@@ -72,8 +91,10 @@ function kind(resource: SettingsResource): SheetKind {
       const listing = await fetchJson<Listing>(`/api/milling/settings/${resource.key}`);
       const row = ctx.id ? listing.rows.find((entry) => entry.id === ctx.id) : null;
       const base: SheetValues = { _options: listing.options, _editing: Boolean(row) };
-      return { ...base, ...Object.fromEntries(resource.fields.map((field) => [field.key, toForm(field, row?.[field.key], base)])) };
+      const start = row ?? NEW_DEFAULTS[resource.key] ?? {};
+      return { ...base, ...Object.fromEntries(resource.fields.map((field) => [field.key, toForm(field, (start as Record<string, unknown>)[field.key], base)])) };
     },
+    guide: GUIDES[resource.key] ?? "",
     sections: [{ fields: resource.fields.map(fieldSpec) }],
     note: "",
     primary: (values) => (values._editing ? "Save" : `Add ${resource.singular}`),
@@ -81,7 +102,10 @@ function kind(resource: SettingsResource): SheetKind {
     submit: (values, ctx) => {
       const editing = Boolean(ctx.id);
       const body = Object.fromEntries(
-        resource.fields.filter((field) => !field.readOnly && !(editing && field.createOnly)).map((field) => [field.key, fromForm(field, values[field.key], values)]),
+        resource.fields
+          .filter((field) => !field.readOnly && !(editing && field.createOnly))
+          // A pass or fail check keeps no reading limits.
+          .map((field) => [field.key, field.numericOnly && resultTypeOf(values) !== "NUMERIC" ? null : fromForm(field, values[field.key], values)]),
       );
       return editing ? { method: "PATCH", url: `/api/milling/settings/${resource.key}/${ctx.id}`, body } : { method: "POST", url: `/api/milling/settings/${resource.key}`, body };
     },
