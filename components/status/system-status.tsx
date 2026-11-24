@@ -58,7 +58,7 @@ const phases: Phase[] = [
     items: [
       { name: "Inventory Management", status: "complete", description: "Stock on hand with reorder alerts" },
       { name: "Fuel Ledger", status: "complete", description: "Diesel tracking with balance" },
-      { name: "Equipment Register", status: "complete", description: "QR codes and service tracking" },
+      { name: "Machinery and vehicles", status: "complete", description: "The register, preventive plans by time or meter, and the fuel log" },
       { name: "Work Orders", status: "complete", description: "Breakdown logging and PM schedule" },
     ]
   },

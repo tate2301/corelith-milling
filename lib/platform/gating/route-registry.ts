@@ -566,6 +566,7 @@ const CORE_API_FEATURE_ROUTES: FeatureRouteEntry[] = [
   { scope: "api", prefix: "/api/maintenance/technicians", featureKey: "maintenance.work-orders" },
   { scope: "api", prefix: "/api/maintenance/home", featureKey: "maintenance.dashboard" },
   { scope: "api", prefix: "/api/maintenance/lookups", featureKey: "maintenance.equipment" },
+  { scope: "api", prefix: "/api/maintenance/equipment", featureKey: "maintenance.equipment" },
   { scope: "api", prefix: "/api/equipment", featureKey: "maintenance.equipment" },
   { scope: "api", prefix: "/api/analytics/downtime", featureKey: "reports.downtime-analytics" },
   { scope: "api", prefix: "/api/downtime-codes", featureKey: "maintenance.breakdowns" },
