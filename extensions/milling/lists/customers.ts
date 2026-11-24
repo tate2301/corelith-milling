@@ -75,13 +75,13 @@ const visits: ListSpec = {
   ],
   rowHref: "/milling/collections/{customerId}",
   bulk: [{ key: "export" }],
-  primary: { label: "Record a visit", icon: "plus", requires: mill("visit.record"), href: "/milling/visits/new" },
+  primary: { label: "Record a visit", icon: "plus", requires: mill("visit.record"), sheet: "mill-visit-new" },
   card: { title: "customer", badge: "route", figure: "share", meta: "{rep} · {visited}", meta2: "{ourBags} bags on the shelf" },
   empty: {
     icon: "Storefront",
     title: "No visits yet",
     line: "A rep records each shop: the competitor's price, our bags on the shelf and our share, with a photo.",
-    primary: { label: "Record a visit", href: "/milling/visits/new", requires: mill("visit.record") },
+    primary: { label: "Record a visit", sheet: "mill-visit-new", requires: mill("visit.record") },
   },
 };
 

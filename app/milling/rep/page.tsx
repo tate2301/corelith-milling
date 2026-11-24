@@ -38,7 +38,7 @@ export default function MillRepPage() {
   const query = useQuery({ queryKey: ["milling", "rep", routeId], queryFn: () => fetchJson<Day>(`/api/milling/rep${routeId ? `?route=${routeId}` : ""}`), staleTime: 0, refetchOnMount: "always" });
   const day = query.data;
   const back = `/milling/rep${routeId ? `?route=${routeId}` : ""}`;
-  const visitHref = (stop: Stop) => `/milling/visits/new?customer=${stop.id}&back=${encodeURIComponent(back)}`;
+  const visitHref = (stop: Stop) => `${back}${back.includes("?") ? "&" : "?"}sheet=mill-visit-new&customer=${stop.id}`;
   const visited = day?.stops.filter((stop) => stop.visited).length ?? 0;
 
   const toolbar = (

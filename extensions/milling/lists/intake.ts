@@ -72,13 +72,13 @@ const intake: ListSpec = {
   rowHref: "/milling/intake/{id}",
   rowMenu: [{ key: "open", label: "Open", requires: MILL_VIEW, do: { href: "/milling/intake/{id}" } }],
   bulk: [{ key: "export" }],
-  primary: { label: "New ticket", icon: "plus", requires: mill("intake.record"), href: "/milling/intake/new" },
+  primary: { label: "New ticket", icon: "plus", requires: mill("intake.record"), sheet: "mill-intake-new" },
   card: { title: "code", badge: "state", figure: "netKg", meta: "{supplier} · {truck}", meta2: "{time} · {typedBy}" },
   empty: {
     icon: "Scales",
     title: "No tickets yet",
     line: "A ticket is one truck of maize: its weights, the supplier and the sample QC takes from it.",
-    primary: { label: "New ticket", href: "/milling/intake/new", requires: mill("intake.record") },
+    primary: { label: "New ticket", sheet: "mill-intake-new", requires: mill("intake.record") },
   },
 };
 
