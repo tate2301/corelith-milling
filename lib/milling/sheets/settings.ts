@@ -10,7 +10,8 @@ type Listing = { rows: Array<Record<string, unknown> & { id: string }>; options:
 const NONE = "None";
 const optionsOf = (field: SettingsField, values: SheetValues): Option[] => (field.options as Option[] | undefined) ?? ((values._options as Record<string, Option[]> | undefined) ?? {})[field.key] ?? [];
 
-function fieldSpec(field: SettingsField): FieldSpec {
+/** A mill setting as a workspace field: numbers right-aligned in mono, choices as selects. */
+export function fieldSpec(field: SettingsField): FieldSpec {
   const common = {
     id: field.key,
     l: field.unit ? `${field.label}, ${field.unit}` : field.label,
