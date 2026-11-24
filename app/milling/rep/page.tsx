@@ -1,84 +1,113 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { EmptyState } from "@corelithzw/react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
+import { DashboardFrame, DashSkeleton } from "@/components/dashboard-frame/dashboard-frame";
+import { Panel } from "@/components/dashboard-frame/panel";
+import { StatusList } from "@/components/dashboard-frame/status-list";
 import { PageChrome } from "@/components/layout/page-chrome";
-import { CustomerState, money, type CustomerStateKey } from "@/components/milling/customer-bits";
-import { MillSelect } from "@/components/milling/mill-ui";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { fetchJson } from "@/lib/api-client";
+import { money, type CustomerStateKey } from "@/components/milling/customer-bits";
+import { LoadError } from "@/components/list-frame/list-states";
+import { Button } from "@/components/workspace/button";
+import { FilterChip } from "@/components/workspace/filter-chip";
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/workspace/menu";
+import type { StateTone } from "@/components/workspace/state-badge";
+import { fetchJson, getApiErrorMessage } from "@/lib/api-client";
 
 type Stop = { id: string; name: string; area: string | null; stop: number; owes: number; overdue: number; state: CustomerStateKey; visited: boolean };
 type Day = { day: string; route: { id: string; code: string; name: string } | null; routes: Array<{ id: string; code: string; name: string }>; stops: Stop[]; next: Stop | null };
 
+const ZONE = "Africa/Harare";
+const STATE: Record<CustomerStateKey, { tone: StateTone; label: string }> = {
+  CURRENT: { tone: "hollow", label: "Current" },
+  OVERDUE: { tone: "warn", label: "Overdue" },
+  OVER_LIMIT: { tone: "bad", label: "Over limit" },
+};
+
 /**
- * A sales rep's route today (HM-C1), on a phone: the shops in order, what
- * each owes, ticked once visited, and the next one to visit pinned at the foot.
+ * A sales rep's route today (HM-C1), on core's DashboardFrame: the shops in
+ * order with what each owes, those visited marked, and the next one to visit
+ * pinned at the foot. Each shop opens its visit.
  */
 export default function MillRepPage() {
   const params = useSearchParams();
+  const router = useRouter();
   const routeId = params.get("route");
   const query = useQuery({ queryKey: ["milling", "rep", routeId], queryFn: () => fetchJson<Day>(`/api/milling/rep${routeId ? `?route=${routeId}` : ""}`), staleTime: 0, refetchOnMount: "always" });
   const day = query.data;
-  const title = day?.route?.code ?? "Today's route";
+  const back = `/milling/rep${routeId ? `?route=${routeId}` : ""}`;
+  const visitHref = (stop: Stop) => `/milling/visits/new?customer=${stop.id}&back=${encodeURIComponent(back)}`;
+  const visited = day?.stops.filter((stop) => stop.visited).length ?? 0;
+
+  const toolbar = (
+    <div role="toolbar" aria-label="Route" className="cx-df-toolbar cx-df-toolbar--wrap">
+      {day?.route && day.routes.length > 1 ? (
+        <Menu>
+          <MenuTrigger asChild>
+            <FilterChip label="Route" value={day.route.code} isSet />
+          </MenuTrigger>
+          <MenuContent>
+            <MenuRadioGroup value={day.route.id} onValueChange={(id) => router.replace(`/milling/rep?route=${id}`)}>
+              {day.routes.map((route) => (
+                <MenuRadioItem key={route.id} value={route.id}>
+                  {route.code} · {route.name}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </MenuContent>
+        </Menu>
+      ) : null}
+      <span className="cx-df-toolbar__quiet">
+        {day ? new Date(`${day.day.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-GB", { timeZone: ZONE, weekday: "long", day: "numeric", month: "long" }) : "Today"}
+      </span>
+    </div>
+  );
+
   return (
     <>
-      <PageChrome title={title} />
-      <div className="mx-auto max-w-md space-y-3 px-4 pb-28 pt-2">
-        {query.isPending ? (
-          <Skeleton className="h-64 w-full" />
-        ) : !day?.route ? (
-          <EmptyState title="No route today" body="You are not the rep on any running route. Ask dispatch to put you on one." />
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground">
-              {new Date(`${day.day.slice(0, 10)}T00:00:00`).toLocaleDateString("en-ZW", { weekday: "long", day: "numeric", month: "long" })}, {day.stops.length} {day.stops.length === 1 ? "stop" : "stops"}
-            </p>
-            {day.routes.length > 1 ? (
-              <MillSelect
-                value={day.route.id}
-                onChange={(id) => window.location.assign(`/milling/rep?route=${id}`)}
-                options={day.routes.map((route) => ({ value: route.id, label: `${route.code}, ${route.name}` }))}
+      <PageChrome title={day?.route?.code ?? "Today's route"} />
+      {query.isError ? (
+        <LoadError noun="route" message={getApiErrorMessage(query.error)} onRetry={() => void query.refetch()} />
+      ) : (
+        <DashboardFrame variant="overview" label="Today's route" toolbar={toolbar}>
+          {!day ? (
+            <div className="cx-df-span-12">
+              <DashSkeleton height={320} />
+            </div>
+          ) : !day.route ? (
+            <Panel span={12} title="Today's route" empty="You are not the rep on any running route. Ask dispatch to put you on one." />
+          ) : (
+            <Panel
+              span={12}
+              title={day.route.name}
+              count={{ value: `${visited}/${day.stops.length}` }}
+              qualifier="visited"
+              link={{ href: `/milling/routes/${day.route.id}`, label: "Route" }}
+              empty={day.stops.length ? null : "No shops are on this route yet."}
+            >
+              <StatusList
+                items={day.stops.map((stop) => ({
+                  id: stop.id,
+                  href: visitHref(stop),
+                  name: `${stop.stop}. ${stop.name}`,
+                  state: stop.visited ? { tone: "ok", label: "Visited" } : STATE[stop.state],
+                  figure: money(stop.owes),
+                  meta: stop.area ?? "",
+                  sub: stop.overdue ? `${money(stop.overdue)} overdue` : "owes",
+                }))}
               />
-            ) : null}
-            <ul className="divide-y divide-border">
-              {day.stops.map((stop) => (
-                <li key={stop.id}>
-                  <Link href={`/milling/visits/new?customer=${stop.id}&back=/milling/rep${routeId ? `?route=${routeId}` : ""}`} className="flex items-center gap-3 py-3">
-                    <span
-                      aria-label={stop.visited ? "Visited" : "Not visited yet"}
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${stop.visited ? "border-transparent bg-[var(--status-success,#166534)] text-white" : "border-border"}`}
-                    >
-                      {stop.visited ? "✓" : ""}
-                    </span>
-                    <span className="flex-1">
-                      <span className="block font-medium">{stop.name}</span>
-                      <span className="block font-mono text-sm text-muted-foreground">
-                        Owes {money(stop.owes)}
-                        {stop.overdue ? `, ${money(stop.overdue)} overdue` : ""}
-                      </span>
-                    </span>
-                    <CustomerState state={stop.state} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {!day.stops.length ? <p className="text-sm text-muted-foreground">No shops are on this route yet.</p> : null}
-          </>
-        )}
-      </div>
+            </Panel>
+          )}
+        </DashboardFrame>
+      )}
       {day?.next ? (
-        <div className="fixed inset-x-0 bottom-14 border-t border-border bg-background p-3 md:static md:mx-auto md:max-w-md md:border-0">
-          <Button className="h-12 w-full" asChild>
-            <Link href={`/milling/visits/new?customer=${day.next.id}&back=/milling/rep${routeId ? `?route=${routeId}` : ""}`}>Visit {day.next.name}</Link>
+        <div className="sticky bottom-14 border-t border-border bg-background p-3 md:bottom-0">
+          <Button variant="primary" className="h-11 w-full" asChild>
+            <Link href={visitHref(day.next)}>Visit {day.next.name}</Link>
           </Button>
         </div>
-      ) : day?.route && day.stops.length ? (
-        <p className="mx-auto max-w-md px-4 text-sm text-muted-foreground">Every shop on the route is visited.</p>
       ) : null}
     </>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import "@/components/milling/mill-dashboard.css";
+
 import { useQuery } from "@tanstack/react-query";
 
 import { ActionList, type ActionItem } from "@/components/dashboard-frame/action-list";
@@ -117,8 +119,8 @@ function Tiles({ data }: { data: Dashboard }) {
   const waiting: ActionItem[] = data.waiting.slice(0, 6).map((row) => ({
     id: row.key,
     href: row.href,
-    title: `${row.code} · ${row.what}`,
-    meta: [row.sentBy, sent(row.sentAt)].filter(Boolean).join(" · "),
+    title: row.what,
+    meta: [row.code, row.sentBy, sent(row.sentAt)].filter(Boolean).join(" · "),
     figure: row.quantity ?? "",
     dot: row.what.startsWith("Exception") || row.href.includes("exceptions") ? "bad" : row.bulk ? "info" : "warn",
   }));
