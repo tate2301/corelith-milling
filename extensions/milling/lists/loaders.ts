@@ -5,7 +5,9 @@ import type { ReportLoader, ReportRow } from "@/lib/reports/types";
 import { targetHref } from "@/components/milling/targets";
 import { listRoutes, listTrips, vehicleLabels } from "@/lib/milling/distribution/trips";
 import { checkWeightSummary } from "@/lib/milling/production/packing";
+import { commissionStatement } from "@/lib/milling/books/commission-statement";
 import { collections, listVisits } from "@/lib/milling/customers/customers";
+import { sellersBoard } from "@/lib/milling/sellers/views";
 import { EXCEPTION_TYPES } from "@/lib/milling/exceptions/exceptions";
 import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
 
@@ -591,6 +593,148 @@ const stops: ReportLoader = {
   },
 };
 
+const usd = (value: number) => "$" + value.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Despatch › Sellers: every seller, where they are today, what they owe and the commission due. */
+const sellers: ReportLoader = {
+  load: async (ctx) => {
+    const board = await sellersBoard(prisma, ctx.companyId);
+    return result(
+      board.sellers.map(
+        (seller): ReportRow => ({
+          id: seller.id,
+          name: seller.name,
+          number: seller.number,
+          activeKey: seller.isActive ? "ACTIVE" : "STOPPED",
+          todayKey: !seller.isActive ? "STOPPED" : seller.outOn ? "OUT" : "IN",
+          today: !seller.isActive ? "Not selling" : seller.outOn ? "Out selling" : "In",
+          trip: seller.outOn?.code ?? null,
+          owed: seller.owed,
+          owedPill: seller.owed > 0 ? "warn" : null,
+          commissionDue: seller.commissionDue,
+          commissionDueText: usd(seller.commissionDue),
+        }),
+      ),
+    );
+  },
+};
+
+const sellerNames = async (companyId: string, ids: string[]) => {
+  const rows = await prisma.millingSeller.findMany({ where: { companyId, id: { in: ids } }, select: { id: true, employeeId: true } });
+  const employees = await prisma.employee.findMany({ where: { companyId, id: { in: rows.map((row) => row.employeeId) } }, select: { id: true, name: true } });
+  return new Map(rows.map((row) => [row.id, employees.find((employee) => employee.id === row.employeeId)?.name ?? ""]));
+};
+
+/** Despatch › Seller trips: every trip, newest first; on a seller, only theirs. */
+const sellerTrips: ReportLoader = {
+  load: async (ctx, params) => {
+    const trips = await prisma.millingSellerTrip.findMany({
+      where: { companyId: ctx.companyId, ...(params.seller ? { sellerId: params.seller } : {}) },
+      orderBy: { issuedAt: "desc" },
+      take: 5000,
+      include: { lines: { select: { bagsOut: true, bagsSold: true } } },
+    });
+    const [names, places] = await Promise.all([
+      sellerNames(ctx.companyId, [...new Set(trips.map((trip) => trip.sellerId))]),
+      prisma.stockLocation.findMany({ where: { id: { in: [...new Set(trips.map((trip) => trip.fromLocationId))] } }, select: { id: true, name: true } }),
+    ]);
+    return result(
+      trips.map((trip): ReportRow => {
+        const short = trip.shortage === null ? null : Number(trip.shortage);
+        const settled = trip.status === "SETTLED";
+        return {
+          id: trip.id,
+          code: trip.code,
+          sellerId: trip.sellerId,
+          seller: names.get(trip.sellerId) ?? null,
+          from: places.find((place) => place.id === trip.fromLocationId)?.name ?? null,
+          stateKey: trip.status,
+          state: trip.status === "OUT" ? "Out" : trip.status === "CANCELLED" ? "Cancelled" : short ? "Short" : "Settled",
+          bagsOut: trip.lines.reduce((sum, line) => sum + line.bagsOut, 0),
+          sold: settled ? trip.lines.reduce((sum, line) => sum + (line.bagsSold ?? 0), 0) : null,
+          due: trip.amountDue === null ? null : Number(trip.amountDue),
+          cash: trip.cashReceived === null ? null : Number(trip.cashReceived),
+          short: short || null,
+          shortPill: short ? "warn" : null,
+          postKey: settled && !trip.invoiceId ? "TO_POST" : settled ? "POSTED" : null,
+          books: settled ? (trip.invoiceId ? "Posted" : "To post") : null,
+          date: trip.tripDate.toISOString().slice(0, 10),
+          issuedAt: trip.issuedAt.toISOString(),
+        };
+      }),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await prisma.millingSeller.findMany({ where: { companyId: ctx.companyId }, select: { id: true } });
+    const names = await sellerNames(ctx.companyId, rows.map((row) => row.id));
+    return { who: distinct([...names.values()]) };
+  },
+};
+
+/** A seller's commission, trip by trip, oldest commission paid first. */
+const sellerCommission: ReportLoader = {
+  load: async (ctx, params) => {
+    if (!params.seller) return result([]);
+    const statement = await commissionStatement(prisma, ctx.companyId, params.seller);
+    return result(
+      statement.trips.map(
+        (trip): ReportRow => ({
+          id: trip.id,
+          sellerId: params.seller!,
+          code: trip.code,
+          date: new Date(trip.date).toISOString().slice(0, 10),
+          workings: trip.products
+            .map((line) => [line.perBag ? `${line.bags} × ${usd(line.perBag)}` : null, line.pct ? `${line.pct}% of ${usd(line.soldFor)}` : null].filter(Boolean).join(" + ") + ` (${line.product})`)
+            .join("; "),
+          earned: trip.earned,
+          paid: trip.paid,
+          due: trip.due,
+          state: trip.due <= 0.005 ? "Paid" : trip.paid > 0 ? "Part paid" : "Due",
+        }),
+      ),
+    );
+  },
+};
+
+/** A seller's payments: money handed in, and commission paid to them. */
+const sellerPayments: ReportLoader = {
+  load: async (ctx, params) => {
+    if (!params.seller) return result([]);
+    const [money, statement] = await Promise.all([
+      prisma.millingSellerPayment.findMany({ where: { companyId: ctx.companyId, sellerId: params.seller }, orderBy: { receivedAt: "desc" } }),
+      commissionStatement(prisma, ctx.companyId, params.seller),
+    ]);
+    const trips = await prisma.millingSellerTrip.findMany({ where: { companyId: ctx.companyId, id: { in: money.map((row) => row.tripId).filter((id): id is string => Boolean(id)) } }, select: { id: true, code: true } });
+    const rows: ReportRow[] = [
+      ...money.map(
+        (row): ReportRow => ({
+          id: row.id,
+          sellerId: params.seller!,
+          at: row.receivedAt.toISOString().slice(0, 10),
+          what: row.kind === "SETTLEMENT" ? "Settlement cash" : "Handed in",
+          covers: row.kind === "SETTLEMENT" ? `Cash for ${trips.find((trip) => trip.id === row.tripId)?.code ?? "a trip"}` : "Against what they owe",
+          reference: row.booksReference,
+          postKey: row.kind === "REPAYMENT" && !row.postedAt ? "TO_POST" : null,
+          amount: Number(row.amount),
+        }),
+      ),
+      ...statement.payments.map(
+        (row): ReportRow => ({
+          id: row.id,
+          sellerId: params.seller!,
+          at: new Date(row.paidAt).toISOString().slice(0, 10),
+          what: "Commission paid",
+          covers: row.covers.map((cover) => `${cover.code} ${usd(cover.amount)}`).join(", ") || null,
+          reference: row.billNumber,
+          postKey: null,
+          amount: row.amount,
+        }),
+      ),
+    ];
+    return result(rows);
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -608,4 +752,8 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-downtime-list": downtime,
   "milling-generator-list": generator,
   "milling-delivery-lines": stops,
+  "milling-seller-list": sellers,
+  "milling-seller-trip-list": sellerTrips,
+  "milling-seller-commission-list": sellerCommission,
+  "milling-seller-payment-list": sellerPayments,
 };

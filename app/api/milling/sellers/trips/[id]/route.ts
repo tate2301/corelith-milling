@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { millRoute, readBody } from "@/lib/milling/api";
 import { cancelSellerTrip, settleSellerTrip } from "@/lib/milling/sellers/trips";
+import { millRefusal } from "@/lib/milling/errors";
+import { sellersBoard } from "@/lib/milling/sellers/views";
 import { prisma } from "@/lib/prisma";
 
 const body = z.discriminatedUnion("action", [
@@ -20,4 +22,14 @@ export const POST = millRoute<{ id: string }>("seller.manage", async ({ companyI
   const input = await readBody(request, body);
   if (input.action === "cancel") return cancelSellerTrip(prisma, { companyId, userId, tripId: id, reason: input.reason });
   return settleSellerTrip(prisma, { companyId, userId, tripId: id, returned: input.returned, discounts: input.discounts, cashReceived: input.cashReceived, notes: input.notes });
+});
+
+/** One trip, as the Sellers board shows it, with the mill's discount rules and what the seller owed: for its settle sheet. */
+export const GET = millRoute<{ id: string }>(null, async ({ companyId }, _request, { id }) => {
+  const row = await prisma.millingSellerTrip.findFirst({ where: { id, companyId }, select: { tripDate: true } });
+  if (!row) throw millRefusal("That trip is not here.");
+  const board = await sellersBoard(prisma, companyId, row.tripDate.toISOString().slice(0, 10));
+  const trip = board.trips.find((entry) => entry.id === id);
+  if (!trip) throw millRefusal("That trip is not here.");
+  return { trip, rules: board.rules, seller: board.sellers.find((seller) => seller.id === trip.sellerId) ?? null };
 });
