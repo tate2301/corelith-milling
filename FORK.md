@@ -92,3 +92,12 @@ pnpm release:promote
 
 `promote` reads the flavour from this file's first line, so it cuts fork
 versions (`<core tag>-milling.<n>`) without any setting.
+
+## The mill's data about core records
+
+Mill details about a core record live in a `Milling…Profile` table keyed by the
+core id, such as a truck's capacity and driver or a bin's kind. The row is made
+the first time someone saves those details on the mill's screens. Readers treat
+a missing row as the defaults. Core's own routes never call mill code. For the
+full rule, see "A fork's own data about core records" in
+`docs/_start-here/RELEASES_AND_FORKS.md`.
