@@ -17,7 +17,13 @@ type Board = {
   books: { accounts: Array<{ id: string; name: string; currency: string }> };
 };
 type TripProduct = { productId: string; product: string; out: number; unitPrice: number };
-type TripView = { trip: { id: string; code: string; seller: string; sellerId: string; products: TripProduct[]; amountDue: number | null; cashReceived: number | null }; rules: Board["rules"]; seller: Seller | null };
+type TripView = {
+  trip: { id: string; code: string; seller: string; sellerId: string; products: TripProduct[]; amountDue: number | null; cashReceived: number | null };
+  rules: Board["rules"];
+  seller: Seller | null;
+  /** Sold at the till on the road. */
+  till?: { count: number; bags: Record<string, number>; discounts: Array<{ productId: string; discount: number; bags: number }>; cash: number };
+};
 
 const MANAGE: [`ext:${string}`, string] = ["ext:milling", "seller.manage"];
 const SLOTS = 16;
@@ -136,10 +142,23 @@ const settle: SheetKind = {
       _rules: `Up to ${usd(view.rules.maxDiscount)} off a bag, in ${Math.round(view.rules.step * 100)}c steps.`,
       _products: view.trip.products.slice(0, SLOTS).map((row) => ({ id: row.productId, name: row.product, sub: String(row.out) })),
       _price: Object.fromEntries(view.trip.products.map((row) => [row.productId, row.unitPrice])),
-      ...Object.fromEntries(view.trip.products.slice(0, SLOTS).flatMap((_row, index) => [[`back${index}`, "0"], [`off${index}`, "None"], [`offBags${index}`, ""]])),
-      cash: "",
+      // The count starts from what the till sold on the road: every bag not sold there is taken as back.
+      ...Object.fromEntries(
+        view.trip.products.slice(0, SLOTS).flatMap((row, index) => {
+          const atTill = view.till?.bags[row.productId] ?? 0;
+          const off = view.till?.discounts.find((entry) => entry.productId === row.productId);
+          return [
+            [`back${index}`, String(view.till?.count ? Math.max(row.out - atTill, 0) : 0)],
+            [`off${index}`, off ? usd(off.discount) : "None"],
+            [`offBags${index}`, off ? String(off.bags) : ""],
+          ];
+        }),
+      ),
+      _till: view.till?.count ? `The till sold ${Object.values(view.till.bags).reduce((a, b) => a + b, 0)} bags on this trip for ${usd(view.till.cash)}. The count below starts from that; it cannot say fewer were sold.` : "",
+      cash: view.till?.count ? view.till.cash.toFixed(2) : "",
     };
   },
+  guide: (values) => String(values._till ?? ""),
   sections: [
     {
       title: "Bags back",

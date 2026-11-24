@@ -4,6 +4,7 @@ import { CUSTOMER_SHEETS } from "./customers";
 import { DESPATCH_SHEETS } from "./despatch";
 import { EXCEPTION_SHEETS } from "./exceptions";
 import { FORM_SHEETS } from "./forms";
+import { TILL_SHEETS } from "./till";
 import { GO_LIVE_SHEETS } from "./go-live";
 import { GROUP_SHEETS } from "./groups";
 import { MACHINE_SHEETS } from "./machines";
@@ -34,6 +35,7 @@ export const MILL_SHEETS: Readonly<Record<string, SheetKind>> = {
   ...GROUP_SHEETS,
   ...GO_LIVE_SHEETS,
   ...FORM_SHEETS,
+  ...TILL_SHEETS,
   ...QC_SHEETS,
   ...RUN_SHEETS,
 };

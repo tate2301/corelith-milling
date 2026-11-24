@@ -4,6 +4,7 @@ import { millRoute, readBody } from "@/lib/milling/api";
 import { cancelSellerTrip, settleSellerTrip } from "@/lib/milling/sellers/trips";
 import { millRefusal } from "@/lib/milling/errors";
 import { sellersBoard } from "@/lib/milling/sellers/views";
+import { tripTillSales } from "@/lib/milling/sales/sales";
 import { prisma } from "@/lib/prisma";
 
 const body = z.discriminatedUnion("action", [
@@ -31,5 +32,8 @@ export const GET = millRoute<{ id: string }>(null, async ({ companyId }, _reques
   const board = await sellersBoard(prisma, companyId, row.tripDate.toISOString().slice(0, 10));
   const trip = board.trips.find((entry) => entry.id === id);
   if (!trip) throw millRefusal("That trip is not here.");
-  return { trip, rules: board.rules, seller: board.sellers.find((seller) => seller.id === trip.sellerId) ?? null };
+  const sold = await tripTillSales(prisma, id);
+  // What the seller sold at the till on the road: the count starts from it.
+  const till = { count: sold.count, bags: Object.fromEntries(sold.bags), discounts: sold.discounts, cash: sold.cash.toNumber() };
+  return { trip, rules: board.rules, seller: board.sellers.find((seller) => seller.id === trip.sellerId) ?? null, till };
 });

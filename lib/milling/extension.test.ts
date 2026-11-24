@@ -66,6 +66,7 @@ describe("the milling vertical", () => {
       "Intake",
       "Production",
       "Quality",
+      "Bag sales",
       "Despatch",
       "Exceptions",
       "Reports",

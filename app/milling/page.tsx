@@ -13,6 +13,7 @@ import { RankList } from "@/components/dashboard-frame/rank-list";
 import { StatusList, type StatusItem } from "@/components/dashboard-frame/status-list";
 import { PageChrome } from "@/components/layout/page-chrome";
 import { LoadError } from "@/components/list-frame/list-states";
+import { useMillAccess } from "@/components/milling/use-mill-access";
 import { fetchJson, getApiErrorMessage } from "@/lib/api-client";
 
 type Waiting = { key: string; code: string; what: string; href: string; sentBy: string | null; sentAt: string; quantity: string | null; bulk?: { kind: string } };
@@ -63,6 +64,7 @@ function change(series: number[], format: (value: number) => string, upIsGood: b
  * row opens the record or list it counts.
  */
 export default function MillingHomePage() {
+  const access = useMillAccess();
   const query = useQuery({ queryKey: ["milling", "dashboard"], queryFn: () => fetchJson<Dashboard>("/api/milling/dashboard"), refetchInterval: 60_000 });
   const toolbar = (
     <div role="toolbar" aria-label="The mill" className="cx-df-toolbar cx-df-toolbar--wrap">
@@ -78,7 +80,7 @@ export default function MillingHomePage() {
   );
   return (
     <>
-      <PageChrome title="Overview" />
+      <PageChrome title="Overview" primary={access.can("sale.record") ? { label: "Sell", icon: "plus", sheet: "mill-sell" } : undefined} />
       {query.isError ? (
         <LoadError noun="overview" message={getApiErrorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : (

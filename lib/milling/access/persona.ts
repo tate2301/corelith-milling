@@ -15,10 +15,10 @@ const PERSONAS: ReadonlyArray<{ group: MillGroupCode; persona: Required<Extensio
   { group: "SUPERVISOR", persona: { home: "/milling/production", phone: ["milling.runs", "milling.packing", "milling.downtime", "attendance"] } },
   { group: "QUALITY", persona: { home: "/milling/quality", phone: ["milling.quality", "milling.runs", "milling.intake"] } },
   { group: "DISPATCH", persona: { home: "/milling/deliveries", phone: ["milling.deliveries", "milling.trips", "milling.till", "milling.sellers"] } },
-  { group: "STORES", persona: { home: "/milling/intake", phone: ["milling.intake", "onhand", "counts", "milling.lots"] } },
+  { group: "STORES", persona: { home: "/milling/intake", phone: ["milling.intake", "onhand", "milling.sales", "milling.lots"] } },
   { group: "OPERATOR", persona: { home: "/milling/production", phone: ["milling.runs", "milling.downtime"] } },
   { group: "DRIVER", persona: { home: "/milling/deliveries", phone: ["milling.deliveries"] } },
-  { group: "SALES_REP", persona: { home: "/milling/rep", phone: ["milling.rep", "customers", "milling.visits", "milling.collections"] } },
+  { group: "SALES_REP", persona: { home: "/milling/rep", phone: ["milling.rep", "milling.sales", "milling.visits", "milling.collections"] } },
   { group: "DIRECTOR", persona: { home: "/milling/director", phone: ["milling.director", "milling.reports"] } },
   { group: "ADMIN", persona: { home: "/milling/settings/general", phone: ["milling.home", "milling.settings"] } },
 ];

@@ -67,7 +67,7 @@ export default function MillRepPage() {
 
   return (
     <>
-      <PageChrome title={day?.route?.code ?? "Today's route"} />
+      <PageChrome title={day?.route?.code ?? "Today's route"} primary={{ label: "Sell", icon: "plus", sheet: "mill-sell" }} />
       {query.isError ? (
         <LoadError noun="route" message={getApiErrorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : (

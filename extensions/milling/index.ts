@@ -150,6 +150,7 @@ export const milling: CorelithExtension = {
         ],
       },
       { id: "milling.quality", label: "Quality", icon: "seal-check", href: "/milling/quality" },
+      { id: "milling.sales", label: "Bag sales", icon: "receipt", href: "/milling/sales" },
       {
         id: "milling.despatch",
         label: "Despatch",

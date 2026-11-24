@@ -1262,12 +1262,50 @@ const openingLines: ReportLoader = {
   },
 };
 
+const PAID: Record<string, string> = { CASH: "Cash", ECOCASH: "EcoCash", ON_ACCOUNT: "On account" };
+
+/** Sales: every sale at the mill's till, with where it was sold and whether Books has it. */
+const sales: ReportLoader = {
+  load: async (ctx) => {
+    const rows = await prisma.millingSale.findMany({ where: { companyId: ctx.companyId }, include: { lines: { select: { bags: true } }, trip: { select: { code: true } } }, orderBy: { soldAt: "desc" }, take: 5000 });
+    const names = await userNames(ctx.companyId, rows.map((row) => row.soldById));
+    return result(
+      rows.map((row): ReportRow => {
+        const booksKey = row.status === "VOIDED" ? "VOIDED" : row.source === "TRIP" ? "TRIP" : row.postedAt ? "POSTED" : "TO_POST";
+        return {
+          id: row.id,
+          code: row.code,
+          where: row.source === "TRIP" ? "On the road" : "At the office",
+          trip: row.trip?.code ?? null,
+          customer: row.customerName ?? (row.source === "TRIP" ? `Sold on ${row.trip?.code ?? "a trip"}` : "Walk-in"),
+          seller: names.get(row.soldById) ?? null,
+          bags: row.lines.reduce((sum, line) => sum + line.bags, 0),
+          total: Number(row.totalAmount),
+          payment: PAID[row.payment] ?? row.payment,
+          stateKey: row.status,
+          booksKey,
+          books: { VOIDED: "Voided", TRIP: "With its trip", POSTED: "Posted", TO_POST: "To post" }[booksKey],
+          time: dayAndTime(row.soldAt),
+          soldAt: row.soldAt.toISOString(),
+          date: isoDay(row.soldAt),
+        };
+      }),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await prisma.millingSale.findMany({ where: { companyId: ctx.companyId }, select: { soldById: true }, distinct: ["soldById"] });
+    const names = await userNames(ctx.companyId, rows.map((row) => row.soldById));
+    return { seller: distinct([...names.values()]) };
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   ...settingsLoaders,
   "milling-trip-list": trips,
   "milling-intake-list": intake,
   "milling-exception-list": exceptions,
   "milling-waiting": waiting,
+  "milling-sale-list": sales,
   "milling-setting-groups": groupMembers,
   "milling-go-live": goLive,
   "milling-opening-lines": openingLines,
