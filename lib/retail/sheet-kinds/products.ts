@@ -665,7 +665,7 @@ const priceListNew: SheetKind = {
       fields: [
         nameField,
         { id: "startFrom", t: "auto", l: "Start from", noun: "price-list", context: { withCost: true } },
-        { id: "prices", t: "seg", l: "Prices", o: PRICES_SEG, v: "% off", half: true },
+        { id: "prices", t: "seg", l: "Prices", o: PRICES_SEG, v: "% off", half: true, show: (values) => (values.startFrom as PickedOption | null)?.id !== "empty" },
         {
           id: "by",
           t: "text",
@@ -673,7 +673,7 @@ const priceListNew: SheetKind = {
           mono: true,
           half: true,
           v: "10%",
-          show: (values) => values.prices !== "The same",
+          show: (values) => (values.startFrom as PickedOption | null)?.id !== "empty" && values.prices !== "The same",
           schema: z.string().refine((value) => {
             const match = /^\s*(\d{1,3}(?:\.\d{1,2})?)\s*%?\s*$/.exec(value);
             return Boolean(match) && Number(match![1]) <= 90;
@@ -724,7 +724,7 @@ const priceListNew: SheetKind = {
   primary: "Add price list",
   done: (_result, _values, payload) => String((payload as { message?: string } | null)?.message ?? "Price list added."),
   next: (result) => `/retail/products/price-lists/${(result as PriceListView).id}`,
-  // "Start from" opens on the default list.
+  // Prefer the default list; without lists the lookup offers an empty start first.
   load: async () => {
     const params = new URLSearchParams({ q: "", limit: "50", context: JSON.stringify({ withCost: true }) });
     const page = await readJson<{ options: Array<{ id: string; label: string; sub?: string | null }> }>(
@@ -735,14 +735,14 @@ const priceListNew: SheetKind = {
   },
   submit: (values) => {
     const start = values.startFrom as PickedOption | null;
-    const prices = PRICES_OF_SEG[String(values.prices)] ?? "SAME";
+    const prices = start?.id === "empty" ? "SAME" : PRICES_OF_SEG[String(values.prices)] ?? "SAME";
     const when = WHEN_OF_SEG[String(values.when)] ?? "ALWAYS";
     return {
       method: "POST",
       url: "/api/v2/retail/price-lists",
       body: {
         name: String(values.name ?? ""),
-        startFrom: start?.id === "cost" ? { cost: true } : { listId: start?.id ?? "" },
+        startFrom: start?.id === "empty" ? { empty: true } : start?.id === "cost" ? { cost: true } : { listId: start?.id ?? "" },
         prices,
         by: prices === "SAME" ? null : String(values.by ?? ""),
         audience: AUDIENCE_OF_SEG[String(values.audience)] ?? "EVERYONE",

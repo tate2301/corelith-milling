@@ -14,7 +14,7 @@ import { BETWEEN_HINT, HOURS_HINT, parseBetween, parseHours, type Between, type 
 
 /**
  * Price lists and their rules (PRD-05, 20-products 4.4, W-16): add one from
- * another list or the cost, change who and where it applies, make it the
+ * another list, the cost, or empty; change who and where it applies, make it the
  * default, duplicate, pause and switch on. Every price a list gets here is an
  * ADDED row in its history; a list made from another follows it
  * (`followsBase`), so a change on the base moves it too (`prices/change.ts`).
@@ -38,7 +38,7 @@ const CURRENCY_WORDS: Record<string, string> = { USD: "US$", ZWG: "ZiG" };
 
 export const priceListInput = z.object({
   name: z.string().max(200),
-  startFrom: z.union([z.object({ listId: z.string().uuid() }), z.object({ cost: z.literal(true) })]),
+  startFrom: z.union([z.object({ listId: z.string().uuid() }), z.object({ cost: z.literal(true) }), z.object({ empty: z.literal(true) })]),
   prices: z.enum(["SAME", "OFF", "ON"]),
   by: z.string().max(20).optional().nullable(),
   audience: z.enum(AUDIENCES),
@@ -295,13 +295,16 @@ function raced(error: unknown, name: string): never {
   throw error;
 }
 
-/** W-16: one list, its categories and one ADDED price per product it takes, in one transaction. */
+/** W-16: one list, its categories and one ADDED price per product it takes, in one transaction.
+ * With no default, the first list becomes the live, unrestricted default. An empty start invents no prices. */
 export async function createPriceList(actor: ListActor, input: PriceListInput): Promise<{ data: PriceListView; message: string }> {
   const { companyId } = actor;
   const errors: Record<string, string> = {};
   const name = checkName(input.name, errors);
 
   let adjust = 0;
+  const fromEmpty = "empty" in input.startFrom;
+  if (fromEmpty && input.prices !== "SAME") errors.prices = "Set prices for each product on an empty list.";
   if (input.prices !== "SAME") {
     const by = percentOf(input.by);
     if (by === null || by < 0 || by > 90) errors.by = "Make it 0% to 90%.";
@@ -321,6 +324,8 @@ export async function createPriceList(actor: ListActor, input: PriceListInput): 
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    // Serialize first-list creation so concurrent requests cannot both become the default.
+    await tx.$queryRaw`SELECT "id" FROM "Company" WHERE "id" = ${companyId} FOR UPDATE`;
     if (name && !errors.name) {
       const clash = await nameClash(tx, companyId, name);
       if (clash) errors.name = clash;
@@ -333,30 +338,42 @@ export async function createPriceList(actor: ListActor, input: PriceListInput): 
       : [];
     if (categories.length !== categoryIds.length) errors.categoryIds = "Choose your own categories.";
 
-    const base =
-      "listId" in input.startFrom
-        ? await tx.priceList.findFirst({
-            where: { id: input.startFrom.listId, companyId, archivedAt: null },
-            select: { id: true, name: true, currency: true, taxInclusive: true },
-          })
-        : await tx.priceList.findFirst({
-            where: { companyId, isDefault: true, archivedAt: null },
-            select: { id: true, name: true, currency: true, taxInclusive: true },
-          });
-    if (!base) errors.startFrom = "Start from one of your price lists.";
+    const defaultList = await tx.priceList.findFirst({
+      where: { companyId, isDefault: true, archivedAt: null },
+      select: { id: true, name: true, currency: true, taxInclusive: true },
+    });
+    const fromCost = "cost" in input.startFrom;
+    const base = "listId" in input.startFrom
+      ? await tx.priceList.findFirst({
+          where: { id: input.startFrom.listId, companyId, archivedAt: null },
+          select: { id: true, name: true, currency: true, taxInclusive: true },
+        })
+      : defaultList;
+    if (!fromEmpty && !fromCost && !base) errors.startFrom = "Start from one of your price lists.";
+
+    const isDefault = !defaultList;
+    if (isDefault) {
+      if (input.audience !== "EVERYONE") errors.audience = "Your first list is the default. Make it for everyone.";
+      if (input.when !== "ALWAYS") errors.when = "Your first list is the default. Make it available always.";
+      if (input.siteId) errors.siteId = "Your first list is the default. Use it at all sites.";
+      if (categoryIds.length) errors.categoryIds = "Your first list is the default. Leave categories empty.";
+      if (!input.switchOn) errors.switchOn = "Your first list is the default. Switch it on now.";
+    }
+    const settings = !base
+      ? await tx.accountingSettings.findUnique({ where: { companyId }, select: { baseCurrency: true } })
+      : null;
 
     if (Object.keys(errors).length > 0) throw new PriceListRefusal(400, Object.values(errors)[0]!, errors);
 
-    const fromCost = "cost" in input.startFrom;
     const now = new Date();
     const list = await tx.priceList.create({
       data: {
         companyId,
         name,
         kind: input.audience === "ACCOUNT_CUSTOMERS" ? "WHOLESALE" : "STANDARD",
-        isDefault: false,
-        currency: base!.currency,
-        taxInclusive: base!.taxInclusive,
+        isDefault,
+        currency: base?.currency ?? settings?.baseCurrency ?? "USD",
+        taxInclusive: base?.taxInclusive ?? true,
         state: input.switchOn ? "ON" : "DRAFT",
         audience: input.audience,
         whenKind: input.when,
@@ -367,9 +384,9 @@ export async function createPriceList(actor: ListActor, input: PriceListInput): 
         endsOn: between ? new Date(`${between.endsOn}T00:00:00Z`) : null,
         siteId: site?.id ?? null,
         minQuantity: 1,
-        basis: fromCost ? "COST" : "LIST",
-        basisListId: fromCost ? null : base!.id,
-        adjustPercent: new Prisma.Decimal(adjust),
+        basis: fromEmpty ? "OWN" : fromCost ? "COST" : "LIST",
+        basisListId: fromEmpty || fromCost ? null : base!.id,
+        adjustPercent: fromEmpty ? null : new Prisma.Decimal(adjust),
         updatedById: actor.userId,
       },
       select: { id: true },
@@ -379,7 +396,7 @@ export async function createPriceList(actor: ListActor, input: PriceListInput): 
     }
 
     const inCategories = categories.length ? { categoryId: { in: categories.map((category) => category.id) } } : {};
-    const rows: Array<{ productId: string; minQuantity: Prisma.Decimal; unitPrice: Prisma.Decimal }> = fromCost
+    const rows: Array<{ productId: string; minQuantity: Prisma.Decimal; unitPrice: Prisma.Decimal }> = fromEmpty ? [] : fromCost
       ? (
           await tx.product.findMany({
             where: { companyId, archivedAt: null, costPrice: { not: null }, ...inCategories },
@@ -400,7 +417,7 @@ export async function createPriceList(actor: ListActor, input: PriceListInput): 
 
     const view: DescribedList = {
       name,
-      isDefault: false,
+      isDefault,
       state: input.switchOn ? "ON" : "DRAFT",
       audience: input.audience,
       whenKind: input.when,
@@ -410,11 +427,11 @@ export async function createPriceList(actor: ListActor, input: PriceListInput): 
       startsOn: between?.startsOn ?? null,
       endsOn: between?.endsOn ?? null,
       minQuantity: 1,
-      basis: fromCost ? "COST" : "LIST",
-      adjustPercent: adjust,
+      basis: fromEmpty ? "OWN" : fromCost ? "COST" : "LIST",
+      adjustPercent: fromEmpty ? null : adjust,
     };
     const categoryNames = categories.map((category) => category.name).sort();
-    const rule = pricesRule(view, fromCost ? null : base!.name, categoryNames);
+    const rule = pricesRule(view, fromEmpty || fromCost ? null : base!.name, categoryNames);
     await writeRetailAuditEvent(tx, {
       actor,
       eventType: RETAIL_AUDIT_EVENTS.priceListCreated,
@@ -422,7 +439,7 @@ export async function createPriceList(actor: ListActor, input: PriceListInput): 
       entityId: list.id,
       payload: { name, products: new Set(rows.map((row) => row.productId)).size, rule },
     });
-    return { id: list.id, message: createdSentence(view, fromCost ? null : base!.name, categoryNames, site?.name ?? null, today) };
+    return { id: list.id, message: createdSentence(view, fromEmpty || fromCost ? null : base!.name, categoryNames, site?.name ?? null, today) };
   }).catch((error: unknown) => raced(error, name));
 
   return { data: (await priceListView(companyId, created.id))!, message: created.message };

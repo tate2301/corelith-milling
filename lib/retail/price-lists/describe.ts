@@ -99,6 +99,7 @@ export function listSub(list: { name: string; isDefault: boolean }, products: nu
  */
 export function createdSentence(list: DescribedList, baseName: string | null, categories: string[], siteName: string | null, today: string): string {
   if (list.state !== "ON") return `${list.name} saved. Switch it on when it is ready.`;
+  if (list.basis === "OWN") return `${list.name} is on. Set prices for each product.`;
   const adjust = list.adjustPercent ?? 0;
   const what = categories.length ? categoryWords(categories) : "everything";
   let price: string;
