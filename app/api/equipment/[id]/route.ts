@@ -1,3 +1,4 @@
+import { linkMaintenanceVehicle } from "@/lib/milling/settings/vehicles";
 import { NextRequest, NextResponse } from "next/server"
 import { validateSession, successResponse, errorResponse } from "@/lib/api-utils"
 import { prisma } from "@/lib/prisma"
@@ -154,31 +155,39 @@ export async function PATCH(
       }
     }
 
-    const equipment = await prisma.equipment.update({
-      where: { id },
-      data: {
-        name: validated.name,
-        category: validated.category,
-        siteId: validated.siteId,
-        locationId: validated.locationId,
-        numberOfItems: validated.numberOfItems,
-        serviceHours: validated.serviceHours,
-        serviceDays: validated.serviceDays,
-        isActive: validated.isActive,
-        meterType: validated.meterType,
-        registrationNumber: validated.registrationNumber === undefined ? undefined : validated.registrationNumber || null,
-        lastServiceDate: validated.lastServiceDate
-          ? new Date(validated.lastServiceDate)
-          : undefined,
-        nextServiceDue: validated.nextServiceDue
-          ? new Date(validated.nextServiceDue)
-          : undefined,
-      },
-      include: {
-        site: { select: { name: true, code: true } },
-        location: { select: { id: true, code: true, name: true } },
-      },
-    })
+    const equipment = await prisma.$transaction(async (tx) => {
+      const saved = await tx.equipment.update({
+        where: { id },
+        data: {
+          name: validated.name,
+          category: validated.category,
+          siteId: validated.siteId,
+          locationId: validated.locationId,
+          numberOfItems: validated.numberOfItems,
+          serviceHours: validated.serviceHours,
+          serviceDays: validated.serviceDays,
+          isActive: validated.isActive,
+          meterType: validated.meterType,
+          registrationNumber: validated.registrationNumber === undefined ? undefined : validated.registrationNumber || null,
+          lastServiceDate: validated.lastServiceDate
+            ? new Date(validated.lastServiceDate)
+            : undefined,
+          nextServiceDue: validated.nextServiceDue
+            ? new Date(validated.nextServiceDue)
+            : undefined,
+        },
+        include: {
+          site: { select: { name: true, code: true } },
+          location: { select: { id: true, code: true, name: true } },
+        },
+      })
+      await linkMaintenanceVehicle(tx, {
+        companyId: session.user.companyId,
+        enabledFeatures: session.user.enabledFeatures,
+        equipment: saved,
+      });
+      return saved;
+    });
 
     return successResponse(equipment)
   } catch (error) {
