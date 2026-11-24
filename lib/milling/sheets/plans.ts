@@ -74,9 +74,15 @@ function planLines(values: SheetValues) {
 }
 
 /** Send plans back (HM-A1, AP-A3): to the planner as drafts, with the reason. */
+/** The ticked plans (a list's bulk), or the one plan its row menu opened on. */
+const sendBackIds = (ctx: { id?: string | null; params: URLSearchParams }) => {
+  const ids = (ctx.params.get("ids") ?? "").split(",").filter(Boolean);
+  return ids.length ? ids : ctx.id ? [ctx.id] : [];
+};
+
 const planSendBack: SheetKind = {
   title: (ctx) => {
-    const count = (ctx.params.get("ids") ?? "").split(",").filter(Boolean).length;
+    const count = sendBackIds(ctx).length;
     return count === 1 ? "Send the plan back" : `Send ${count} plans back`;
   },
   sub: "They go back to the planner as drafts, with your reason.",
@@ -89,7 +95,7 @@ const planSendBack: SheetKind = {
   submit: (values, ctx) => ({
     method: "POST",
     url: "/api/milling/decide-many",
-    body: { action: "send-back", reason: text(values.reason), items: (ctx.params.get("ids") ?? "").split(",").filter(Boolean).map((id) => ({ kind: "plan", id })) },
+    body: { action: "send-back", reason: text(values.reason), items: sendBackIds(ctx).map((id) => ({ kind: "plan", id })) },
   }),
   invalidate: [["list"], ["milling"]],
   requires: [["ext:milling", "plan.approve"]],

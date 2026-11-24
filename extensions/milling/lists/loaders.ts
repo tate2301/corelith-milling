@@ -15,6 +15,8 @@ import { routeDetail } from "@/lib/milling/distribution/trips";
 import { sellersBoard } from "@/lib/milling/sellers/views";
 import { EXCEPTION_TYPES } from "@/lib/milling/exceptions/exceptions";
 import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
+import { loadMillAccess } from "@/lib/milling/access/server";
+import { waitingFor } from "@/lib/milling/reports/home";
 
 /** The mill's clock: Zimbabwe has one zone. */
 const ZONE = "Africa/Harare";
@@ -1174,11 +1176,39 @@ const settingsLoaders: Record<string, ReportLoader> = Object.fromEntries(
   ]),
 );
 
+/** Waiting for you: what this person's groups let them decide, through the same reader as the Overview. */
+const waiting: ReportLoader = {
+  load: async (ctx) => {
+    const access = await loadMillAccess({ id: ctx.userId, companyId: ctx.companyId, role: ctx.role });
+    const rows = await waitingFor(prisma, ctx.companyId, access);
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.key,
+          code: row.code,
+          what: row.what,
+          kindKey: row.bulk?.kind ?? "other",
+          href: row.href,
+          sentBy: row.sentBy,
+          sent: isoDay(row.sentAt),
+          sentAt: row.sentAt.toISOString(),
+          quantity: row.quantity,
+        }),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const access = await loadMillAccess({ id: ctx.userId, companyId: ctx.companyId, role: ctx.role });
+    return { what: distinct((await waitingFor(prisma, ctx.companyId, access)).map((row) => row.what)) };
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   ...settingsLoaders,
   "milling-trip-list": trips,
   "milling-intake-list": intake,
   "milling-exception-list": exceptions,
+  "milling-waiting": waiting,
   "milling-run-list": runs,
   "milling-packing-list": packing,
   "milling-test-list": tests,
