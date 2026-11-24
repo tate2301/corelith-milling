@@ -4,7 +4,7 @@ import * as React from "react";
 import { useSession } from "next-auth/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { canRetailRoleDo } from "@/lib/retail/permission-matrix";
+import { canRetailRoleDo, type RetailAction, type RetailResource } from "@/lib/retail/permission-matrix";
 import { SHEET_KINDS } from "@/lib/retail/sheet-kinds";
 import type { SheetCtx, SheetKind } from "@/lib/workspace/sheet-kind";
 
@@ -57,7 +57,8 @@ function Host() {
       params,
       id: params.get("id"),
       user: { id: userId, name: userName, role },
-      can: (resource, action) => canRetailRoleDo(role, resource, action),
+      // An extension's grants are its own sheet host's to answer; here they are not held.
+      can: (resource, action) => !resource.startsWith("ext:") && canRetailRoleDo(role, resource as RetailResource, action as RetailAction),
       ...(list.length > 0 ? { step: { id: list[at]!, at, count: list.length } } : {}),
     };
   }, [search, userId, userName, role, kind]);
