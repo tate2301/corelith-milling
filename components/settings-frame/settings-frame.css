@@ -92,7 +92,7 @@
 .cx-sf-pager b { color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
 .cx-sf-pager span { flex: 1; }
 
-/* Reuse the original form, save bar and aside inside Mill settings. */
+/* Reuse the original form, save bar and aside inside another settings surface (an extension's own settings page). */
 .cx-sf.cx-sf--embedded {
   height: auto;
   width: 100%;
