@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { PageChrome } from "@/components/layout/page-chrome";
 import { LoadError } from "@/components/list-frame/list-states";
 import { Button } from "@/components/workspace/button";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { fetchJson, getApiErrorMessage } from "@/lib/api-client";
 import type { CalendarItem } from "@/lib/maintenance/overview";
 
@@ -45,12 +46,14 @@ function weeksOf(month: string) {
  * its work order or plan.
  */
 export function MaintenanceCalendar() {
+  // "Today" and this month are the browser's: the server's clock and zone can differ.
+  const hydrated = useHydrated();
   const params = useSearchParams();
   const router = useRouter();
   const month = /^\d{4}-\d{2}$/.test(params.get("month") ?? "") ? params.get("month")! : thisMonth();
-  const query = useQuery({ queryKey: ["maintenance", "calendar", month], queryFn: () => fetchJson<{ month: string; items: CalendarItem[] }>(`/api/maintenance/calendar?month=${month}`) });
+  const query = useQuery({ queryKey: ["maintenance", "calendar", month], queryFn: () => fetchJson<{ month: string; items: CalendarItem[] }>(`/api/maintenance/calendar?month=${month}`), enabled: hydrated });
   const go = (to: string) => router.replace(`/maintenance/schedule?month=${to}`);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hydrated ? new Date().toISOString().slice(0, 10) : "";
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of query.data?.items ?? []) byDay.set(item.day, [...(byDay.get(item.day) ?? []), item]);
   const name = new Date(`${month}-15T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
@@ -78,7 +81,7 @@ export function MaintenanceCalendar() {
         <span className="cx-df-toolbar__spacer" />
         <span className="cx-df-toolbar__quiet">{query.data ? `${query.data.items.length} in ${name.split(" ")[0]}` : ""}</span>
       </div>
-      {query.isError ? (
+      {!hydrated ? null : query.isError ? (
         <LoadError noun="calendar" message={getApiErrorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : (
         <div className={styles.wrap}>
