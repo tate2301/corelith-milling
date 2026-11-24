@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   return successResponse({ groups: MILL_GROUPS, members });
 }
 
-const body = z.object({ userId: z.string().uuid(), groups: z.array(z.string()).max(8) });
+const body = z.object({ userId: z.string().uuid(), groups: z.array(z.string()).max(MILL_GROUPS.length) });
 
 /** Put one person in exactly the groups given. */
 export async function PUT(request: NextRequest) {

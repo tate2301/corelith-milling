@@ -85,6 +85,26 @@ const visits: ListSpec = {
   },
 };
 
+/**
+ * Customers › Surveys (R9): the market survey, the same visits grouped by
+ * route, each route's footer the average competitor price, our bags seen and
+ * our average shelf share over the days chosen.
+ */
+const surveys: ListSpec = {
+  ...visits,
+  noun: "visits",
+  search: { placeholder: "Search the survey", keys: ["customer", "route", "rep"] },
+  filters: [
+    { key: "date", label: "Date", type: "period", any: "Any time", column: "date", primary: true, default: "this-month" },
+    { key: "route", label: "Route", type: "choice", any: "Any", primary: true, optionsFromLoader: true, column: "route" },
+  ],
+  groups: ["route", "rep"],
+  defaultGroup: "route",
+  columns: visits.columns.filter((column) => column.key !== "note"),
+  primary: undefined,
+  empty: { icon: "Storefront", title: "No visits in these days", line: "The survey is built from the reps' shop visits: the competitor's price, our bags on the shelf and our share." },
+};
+
 const def = (key: string, title: string, href: string, list: ListSpec, sort: string, dir: "asc" | "desc"): ReportDefinition => ({
   ...LIST_BASE,
   key,
@@ -98,3 +118,4 @@ const def = (key: string, title: string, href: string, list: ListSpec, sort: str
 
 export const CUSTOMERS_LIST = def("milling-customer-list", "Collections", "/milling/collections", customers, "overdue", "desc");
 export const VISITS_LIST = def("milling-visit-list", "Visits", "/milling/visits", visits, "visitedAt", "desc");
+export const SURVEYS_LIST = def("milling-survey-list", "Surveys", "/milling/surveys", surveys, "visitedAt", "desc");

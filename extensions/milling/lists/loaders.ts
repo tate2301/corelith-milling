@@ -17,6 +17,8 @@ import { EXCEPTION_TYPES } from "@/lib/milling/exceptions/exceptions";
 import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
 import { loadMillAccess } from "@/lib/milling/access/server";
 import { waitingFor } from "@/lib/milling/reports/home";
+import { MILL_GROUPS } from "@/lib/milling/access/groups";
+import { listMillMembers } from "@/lib/milling/access/membership";
 
 /** The mill's clock: Zimbabwe has one zone. */
 const ZONE = "Africa/Harare";
@@ -1203,12 +1205,33 @@ const waiting: ReportLoader = {
   },
 };
 
+/** Settings › Who does what: everyone who can sign in and their mill groups. */
+const groupMembers: ReportLoader = {
+  load: async (ctx) => {
+    const members = await listMillMembers(prisma, ctx.companyId);
+    const name = (code: string) => MILL_GROUPS.find((group) => group.code === code)?.name ?? code;
+    return result(
+      members.map(
+        (row): ReportRow => ({
+          id: row.userId,
+          name: row.name,
+          email: row.email,
+          groups: row.groups.map(name).join(", ") || null,
+          count: row.groups.length,
+          access: !row.isActive ? "Removed" : row.role === "SUPERADMIN" || row.role === "MANAGER" ? "Everything" : "Active",
+        }),
+      ),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   ...settingsLoaders,
   "milling-trip-list": trips,
   "milling-intake-list": intake,
   "milling-exception-list": exceptions,
   "milling-waiting": waiting,
+  "milling-setting-groups": groupMembers,
   "milling-run-list": runs,
   "milling-packing-list": packing,
   "milling-test-list": tests,
@@ -1219,6 +1242,7 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-shift-list": shifts,
   "milling-customer-list": customers,
   "milling-visit-list": visits,
+  "milling-survey-list": visits,
   "milling-downtime-list": downtime,
   "milling-generator-list": generator,
   "milling-delivery-lines": stops,
