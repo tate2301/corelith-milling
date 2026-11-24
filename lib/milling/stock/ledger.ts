@@ -41,6 +41,7 @@ export type LotReason =
   | "WEIGHT_CORRECTION"
   | "GATE_SALE"
   | "SELLER_SALE"
+  | "SALE_VOID"
   | "BIN_MOVE";
 
 /**

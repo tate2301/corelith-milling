@@ -335,6 +335,13 @@ export async function settleSellerTrip(db: Db, args: { companyId: string; userId
       new Map(products.map((product) => [product.id, product.name])),
     );
 
+    // The till's sales on the road are sold: the count cannot say fewer went.
+    const tillLines = await tx.millingSaleLine.findMany({ where: { sale: { tripId: trip.id, status: "SOLD" } }, select: { productId: true, bags: true } });
+    for (const product of figures.products) {
+      const atTill = tillLines.filter((line) => line.productId === product.productId).reduce((sum, line) => sum + line.bags, 0);
+      if (product.sold < atTill) throw millRefusal(`The till sold ${atTill} bags of ${products.find((row) => row.id === product.productId)?.name ?? "a product"} on this trip; the count says ${product.sold}. Count the bags back again.`);
+    }
+
     const before = await sellerBalance(tx, args.companyId, trip.sellerId);
     const owedNow = before.plus(figures.due);
     if (cash.gt(owedNow)) throw millRefusal(`$${cash.toFixed(2)} is more than ${employee.name} owes ($${owedNow.toFixed(2)}). Count the cash again.`);
@@ -404,6 +411,8 @@ export async function cancelSellerTrip(db: Db, args: { companyId: string; userId
     const trip = await tx.millingSellerTrip.findFirst({ where: { id: args.tripId, companyId: args.companyId }, include: { lines: true } });
     if (!trip) throw millRefusal("That trip is not in this workspace.");
     if (trip.status !== "OUT") throw millRefusal(`${trip.code} is ${trip.status.toLowerCase()}.`);
+    const sold = await tx.millingSale.count({ where: { tripId: trip.id, status: "SOLD" } });
+    if (sold) throw millRefusal(`${sold} ${sold === 1 ? "sale was" : "sales were"} made at the till on ${trip.code}. Settle it instead, or void ${sold === 1 ? "that sale" : "those sales"} first.`);
     const source = { companyId: args.companyId, userId: args.userId, sourceType: SELLER_TRIP_ENTITY, sourceId: trip.id, reference: trip.code };
     for (const line of trip.lines) {
       if (line.reservationId) await releaseReservation(tx, { companyId: args.companyId, reservationId: line.reservationId });
