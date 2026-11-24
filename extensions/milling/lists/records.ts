@@ -148,3 +148,67 @@ const results: ListSpec = {
 };
 
 export const QC_RESULTS_LIST = recordSource("milling-qc-results", "Test results", results, "inspectedAt", "desc");
+
+/** A run's stages as recorded (PR-A2): when each ran, what went in and was taken out, measured or estimated, and anything abnormal. */
+const runStages: ListSpec = {
+  noun: "stages",
+  read: MILL_VIEW,
+  search: { placeholder: "Search stages", keys: ["stage", "operator", "observations"] },
+  filters: [{ key: "run", type: "parent", column: "runId" }],
+  sorts: [{ key: "order", label: "In order", rules: [{ column: "startedAt", dir: "asc" }] }],
+  columns: [
+    { key: "stage", label: "Stage", kind: "text", cell: "text", strong: true, width: "minmax(160px,1.2fr)", align: "start", priority: 1 },
+    { key: "ran", label: "Ran", kind: "text", cell: "mono", width: "150px", align: "start", priority: 1 },
+    { key: "inputKg", label: "In kg", kind: "number", cell: "num", empty: "dash", width: "100px", align: "end", priority: 1 },
+    { key: "removedKg", label: "Removed kg", kind: "number", cell: "num", empty: "dash", total: "sum", width: "110px", align: "end", priority: 2 },
+    { key: "how", label: "Figures", kind: "status", cell: "dot", tones: { Weighed: "ok", Estimated: "neutral" }, empty: "blank", width: "110px", align: "start", priority: 3 },
+    { key: "operator", label: "Operator", kind: "text", cell: "text", width: "130px", align: "start", priority: 3 },
+    { key: "flag", label: "", kind: "status", cell: "state", tones: { Abnormal: "bad" }, empty: "blank", width: "100px", align: "start", priority: 1 },
+    { key: "startedAt", label: "Started at", kind: "date", cell: "date", hidden: true, width: "150px", align: "end", priority: 3 },
+  ],
+  rowHref: "/milling/production/{runId}",
+  card: { title: "stage", badge: "flag", figure: "inputKg", meta: "{ran} · {operator}" },
+  empty: { icon: "Factory", title: "No stage recorded yet", line: "Record each stage as the run goes through the line." },
+};
+
+/** The maize a run took in, by lot and place. */
+const runMaize: ListSpec = {
+  noun: "lots",
+  read: MILL_VIEW,
+  search: { placeholder: "Search lots", keys: ["lot", "place"] },
+  filters: [{ key: "run", type: "parent", column: "runId" }],
+  sorts: [{ key: "lot", label: "Lot", rules: [{ column: "lot", dir: "asc" }] }],
+  columns: [
+    { key: "lot", label: "Lot", kind: "code", cell: "ref", href: "/milling/trace?code={lot}", width: "minmax(170px,1fr)", align: "start", priority: 1 },
+    { key: "place", label: "From", kind: "code", cell: "mono", width: "140px", align: "start", priority: 2 },
+    { key: "kg", label: "Kg", kind: "number", cell: "num", total: "sum", width: "120px", align: "end", priority: 1 },
+  ],
+  rowHref: "/milling/trace?code={lot}",
+  card: { title: "lot", figure: "kg", meta: "{place}" },
+  empty: { icon: "Factory", title: "No maize issued yet", line: "Issue maize from a released lot to start the run." },
+};
+
+/** What a run put out: each bulk product into its lot, on hold until quality releases it. */
+const runOutputs: ListSpec = {
+  noun: "outputs",
+  read: MILL_VIEW,
+  search: { placeholder: "Search outputs", keys: ["product", "lot"] },
+  filters: [{ key: "run", type: "parent", column: "runId" }],
+  sorts: [{ key: "product", label: "Product", rules: [{ column: "product", dir: "asc" }] }],
+  columns: [
+    { key: "product", label: "Product", kind: "text", cell: "text", strong: true, width: "minmax(160px,1.2fr)", align: "start", priority: 1 },
+    { key: "lot", label: "Lot", kind: "code", cell: "ref", href: "/milling/quality/{lotId}", width: "180px", align: "start", priority: 1 },
+    { key: "place", label: "Into", kind: "code", cell: "mono", width: "120px", align: "start", priority: 2 },
+    { key: "how", label: "Figure", kind: "status", cell: "dot", tones: { Weighed: "ok", Estimated: "neutral" }, width: "110px", align: "start", priority: 3 },
+    { key: "state", label: "Lot state", kind: "status", cell: "state", tones: { "On hold": "warn", Released: "ok", Rejected: "bad", Used: "hollow" }, width: "110px", align: "start", priority: 1 },
+    { key: "kg", label: "Kg", kind: "number", cell: "num", total: "sum", width: "110px", align: "end", priority: 1 },
+    { key: "share", label: "Of maize", kind: "number", cell: "num", percent: true, total: "sum", width: "100px", align: "end", priority: 2 },
+  ],
+  rowHref: "/milling/quality/{lotId}",
+  card: { title: "product", badge: "state", figure: "kg", meta: "{lot}" },
+  empty: { icon: "Factory", title: "Nothing out yet", line: "Record each bulk product as it comes off the line." },
+};
+
+export const RUN_STAGES_LIST = recordSource("milling-run-stages", "Run stages", runStages, "startedAt", "asc");
+export const RUN_MAIZE_LIST = recordSource("milling-run-maize", "Run maize", runMaize, "lot", "asc");
+export const RUN_OUTPUTS_LIST = recordSource("milling-run-outputs", "Run outputs", runOutputs, "product", "asc");

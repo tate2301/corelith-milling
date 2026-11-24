@@ -7,6 +7,7 @@ import { MACHINE_SHEETS } from "./machines";
 import { PLAN_SHEETS } from "./plans";
 import { PRODUCTION_SHEETS } from "./production";
 import { QC_SHEETS } from "./qc";
+import { RUN_SHEETS } from "./run";
 import { SELLER_SHEETS } from "./sellers";
 import { TRIP_SHEETS } from "./trip";
 
@@ -24,4 +25,5 @@ export const MILL_SHEETS: Readonly<Record<string, SheetKind>> = {
   ...TRIP_SHEETS,
   ...SELLER_SHEETS,
   ...QC_SHEETS,
+  ...RUN_SHEETS,
 };

@@ -843,6 +843,90 @@ const qcResults: ReportLoader = {
   },
 };
 
+async function runOf(companyId: string, runId: string | undefined) {
+  if (!runId) return null;
+  return prisma.millingBatch.findFirst({ where: { id: runId, companyId }, include: { sources: true, stages: { orderBy: { startedAt: "asc" } }, outputs: true } });
+}
+async function locationCodes(companyId: string) {
+  const rows = await prisma.stockLocation.findMany({ where: { site: { companyId } }, select: { id: true, code: true } });
+  return new Map(rows.map((row) => [row.id, row.code]));
+}
+
+/** A run's stage records, in the order they ran. */
+const runStages: ReportLoader = {
+  load: async (ctx, params) => {
+    const run = await runOf(ctx.companyId, params.run);
+    if (!run) return result([]);
+    const [stages, names] = await Promise.all([
+      prisma.millingProcessStage.findMany({ where: { companyId: ctx.companyId, id: { in: run.stages.map((row) => row.stageId) } }, select: { id: true, name: true } }),
+      userNames(ctx.companyId, run.stages.map((row) => row.operatorId)),
+    ]);
+    return result(
+      run.stages.map(
+        (row): ReportRow => ({
+          id: row.id,
+          runId: run.id,
+          stage: stages.find((stage) => stage.id === row.stageId)?.name ?? row.stageCode,
+          ran: `${clock(row.startedAt)}${row.endedAt ? `–${clock(row.endedAt)}` : ", running"}`,
+          inputKg: row.inputKg === null ? null : Number(row.inputKg),
+          removedKg: row.removedKg === null ? null : Number(row.removedKg),
+          how: row.inputKg === null && row.removedKg === null ? null : row.inputEstimated || row.removedEstimated ? "Estimated" : "Weighed",
+          operator: names.get(row.operatorId) ?? null,
+          flag: row.abnormal ? "Abnormal" : null,
+          startedAt: row.startedAt.toISOString(),
+        }),
+      ),
+    );
+  },
+};
+
+/** The maize a run took in. */
+const runMaize: ReportLoader = {
+  load: async (ctx, params) => {
+    const run = await runOf(ctx.companyId, params.run);
+    if (!run) return result([]);
+    const [lots, places] = await Promise.all([
+      prisma.millingLot.findMany({ where: { id: { in: run.sources.map((row) => row.lotId) } }, select: { id: true, code: true } }),
+      locationCodes(ctx.companyId),
+    ]);
+    return result(
+      run.sources.map((row): ReportRow => ({ id: row.id, runId: run.id, lot: lots.find((lot) => lot.id === row.lotId)?.code ?? null, place: places.get(row.stockLocationId) ?? null, kg: Number(row.quantityKg) })),
+    );
+  },
+};
+
+/** What a run put out, and the share of its maize each is. */
+const runOutputs: ReportLoader = {
+  load: async (ctx, params) => {
+    const run = await runOf(ctx.companyId, params.run);
+    if (!run) return result([]);
+    const [lots, products, places] = await Promise.all([
+      prisma.millingLot.findMany({ where: { id: { in: run.outputs.map((row) => row.lotId) } }, select: { id: true, code: true, status: true } }),
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: run.outputs.map((row) => row.productId) } }, select: { id: true, name: true } }),
+      locationCodes(ctx.companyId),
+    ]);
+    const maize = Number(run.maizeIssuedKg);
+    return result(
+      run.outputs.map((row): ReportRow => {
+        const lot = lots.find((entry) => entry.id === row.lotId);
+        const kgOut = Number(row.quantityKg);
+        return {
+          id: row.id,
+          runId: run.id,
+          product: products.find((product) => product.id === row.productId)?.name ?? null,
+          lotId: row.lotId,
+          lot: lot?.code ?? null,
+          place: places.get(row.stockLocationId) ?? null,
+          how: row.isEstimated ? "Estimated" : "Weighed",
+          state: lot ? (LOT_STATE[lot.status] ?? lot.status) : null,
+          kg: kgOut,
+          share: maize > 0 ? Math.round((kgOut / maize) * 1000) / 10 : null,
+        };
+      }),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -864,6 +948,9 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-customer-despatches": customerDespatches,
   "milling-route-stops": routeStops,
   "milling-qc-results": qcResults,
+  "milling-run-stages": runStages,
+  "milling-run-maize": runMaize,
+  "milling-run-outputs": runOutputs,
   "milling-seller-list": sellers,
   "milling-seller-trip-list": sellerTrips,
   "milling-seller-commission-list": sellerCommission,
