@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, type ReactNode } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { GENERAL_SETTINGS_FIELDS } from "@/lib/milling/settings/fields";
 const access = vi.hoisted(() => ({ edit: true }));
 vi.mock("@/components/milling/use-mill-access", () => ({ useMillAccess: () => ({ can: () => access.edit }) }));
-vi.mock("@/components/milling/settings-shell", () => ({ MillSettingsShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
+vi.mock("@/components/layout/page-chrome", () => ({ PageChrome: () => null }));
 vi.mock("@/components/ui/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 import GeneralPage from "./page";
 
@@ -44,7 +44,8 @@ it("uses the original save bar with discard, and writes mill settings only on sa
   const writes = fetcher.mock.calls.filter(([, init]) => init?.method === "PUT");
   expect(writes).toHaveLength(1);
   expect(writes[0][0]).toBe("/api/milling/settings/general");
-  expect(JSON.parse(String(writes[0][1]?.body))[GENERAL_SETTINGS_FIELDS[0].key]).toBe("2");
+  // The first field drawn is the shift length, under Shift.
+  expect(JSON.parse(String(writes[0][1]?.body)).shiftHours).toBe("2");
   expect(document.body.textContent).not.toContain("change not saved");
 });
 it("keeps mill group read-only restrictions", async () => {

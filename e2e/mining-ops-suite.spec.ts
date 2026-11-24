@@ -69,31 +69,16 @@ const STORES: readonly Route[] = [
     redirectsTo: "/stores/movements",
     expect: /No movements yet/i,
   },
-  { path: "/stores/fuel", name: "Fuel log", blocked: true },
 ];
 
 const MAINTENANCE: readonly Route[] = [
-  {
-    path: "/maintenance",
-    name: "Maintenance command centre",
-    expect: /Maintenance Command Center/i,
-  },
-  { path: "/maintenance/equipment", name: "Equipment register", expect: /Equipment Register/i },
-  {
-    path: "/maintenance/work-orders",
-    name: "Work orders",
-    expect: /No work orders logged for this site/i,
-  },
-  {
-    path: "/maintenance/breakdown",
-    name: "Log a breakdown",
-    expect: /Capture equipment downtime and create a work order/i,
-  },
-  {
-    path: "/maintenance/schedule",
-    name: "PM schedule",
-    expect: /Upcoming preventive maintenance windows/i,
-  },
+  { path: "/maintenance", name: "Assets overview", expect: /Needs action/i },
+  { path: "/maintenance/equipment", name: "Machinery and vehicles", expect: /Machinery and vehicles/i },
+  { path: "/maintenance/work-orders", name: "Work orders", expect: /Work orders/i },
+  { path: "/maintenance/breakdown", name: "Log a breakdown", expect: /Log a breakdown/i },
+  { path: "/maintenance/schedule", name: "Preventive maintenance", expect: /Preventive maintenance/i },
+  { path: "/maintenance/technicians", name: "Technicians", expect: /Technicians/i },
+  { path: "/maintenance/fuel", name: "Fuel log", expect: /Fuel log/i },
 ];
 
 const COMPLIANCE: readonly Route[] = [

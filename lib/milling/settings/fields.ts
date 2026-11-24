@@ -61,6 +61,7 @@ export const LOCATION_KINDS = [
   { value: "PROCESS", label: "Process (in the line)" },
   { value: "DOCK", label: "Receiving or loading" },
   { value: "VEHICLE", label: "Vehicle" },
+  { value: "SELLERS", label: "With sellers" },
 ] as const;
 
 export const QC_POINTS = [
@@ -198,4 +199,7 @@ export const GENERAL_SETTINGS_FIELDS: readonly SettingsField[] = [
   { key: "defaultIntakeBagKg", label: "Intake bag weight", type: "number", unit: "kg", required: true, min: 1, max: 200, help: "What one bag of maize is taken to weigh when intake is counted in bags." },
   { key: "shiftHours", label: "Shift length", type: "number", unit: "hours", required: true, min: 1, max: 24, help: "Overtime is worked out against this." },
   { key: "shiftCrewSize", label: "Crew on a shift", type: "number", required: true, min: 1, max: 100 },
+  { key: "sellerMaxDiscount", label: "Most a seller may take off a bag", type: "number", unit: "$", required: true, min: 0, max: 100, help: "Discounts above this are refused when a seller settles." },
+  { key: "sellerDiscountStep", label: "Seller discounts go in steps of", type: "number", unit: "$", required: true, min: 0.01, max: 100, help: "10c steps: 0.10." },
+  { key: "extractionTargetPct", label: "Extraction target", type: "number", unit: "%", required: true, min: 1, max: 100, help: "Meal out of maize milled; the director is told when a day falls short." },
 ];

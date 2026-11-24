@@ -42,6 +42,9 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   DISPATCHED: { label: "On the road", tone: "in_progress" },
   DELIVERED: { label: "Awaiting reconciliation", tone: "in_review" },
   CONFIRMED: { label: "Confirmed", tone: "passing" },
+  // Sellers
+  OUT: { label: "Out selling", tone: "in_progress" },
+  SETTLED: { label: "Settled", tone: "passing" },
 };
 
 export function millStatusLabel(status: string | null | undefined): string {

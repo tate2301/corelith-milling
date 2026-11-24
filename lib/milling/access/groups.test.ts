@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import { MILL_CAPABILITIES, MILL_GROUP_CODES, MILL_GROUPS, millAccessFor } from "./groups";
 
 describe("the mill's permission groups", () => {
-  it("are the eight in the spec, each with something to do", () => {
+  it("are the spec's eight and the canvas's sales rep and director, each with something to do but the director, who reads", () => {
     expect(MILL_GROUPS.map((group) => group.code)).toEqual([...MILL_GROUP_CODES]);
-    for (const group of MILL_GROUPS) expect(group.capabilities.length).toBeGreaterThan(0);
+    for (const group of MILL_GROUPS) {
+      if (group.code === "DIRECTOR") expect(group.capabilities).toEqual([]);
+      else expect(group.capabilities.length).toBeGreaterThan(0);
+    }
   });
 
   it("leave no capability that nobody can be given", () => {
@@ -26,7 +29,9 @@ describe("the mill's permission groups", () => {
 
     const both = millAccessFor("CLERK", ["QUALITY", "STORES", "NOT_A_GROUP"]);
     expect(both.groups).toEqual(["STORES", "QUALITY"]);
-    expect(both.capabilities).toEqual(["intake.record", "stock.move", "stock.count", "qc.record", "qc.decide"]);
+    expect(both.capabilities).toEqual(["intake.record", "stock.move", "stock.count", "qc.record", "qc.decide", "seller.manage", "sale.record"]);
+    expect(millAccessFor("CLERK", ["SALES_REP"]).capabilities).toEqual(["visit.record", "collection.record", "sale.record"]);
+    expect(millAccessFor("CLERK", ["DIRECTOR"])).toMatchObject({ canView: true, capabilities: [] });
     expect(both.capabilities).not.toContain("exception.decide");
   });
 

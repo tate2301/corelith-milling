@@ -30,6 +30,11 @@ const equipmentUpdateSchema = z
     /** What the meter counts; a vehicle's plate. Readings go through /api/equipment/[id]/meter-readings. */
     meterType: z.enum(["NONE", "HOURS", "KM"]).optional(),
     registrationNumber: z.string().trim().max(20).nullable().optional(),
+    kind: z.enum(["MACHINE", "VEHICLE"]).optional(),
+    make: z.string().trim().max(80).nullable().optional(),
+    model: z.string().trim().max(80).nullable().optional(),
+    serialNumber: z.string().trim().max(80).nullable().optional(),
+    commissionedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "No fields provided",
@@ -169,6 +174,11 @@ export async function PATCH(
           isActive: validated.isActive,
           meterType: validated.meterType,
           registrationNumber: validated.registrationNumber === undefined ? undefined : validated.registrationNumber || null,
+          kind: validated.kind,
+          make: validated.make === undefined ? undefined : validated.make || null,
+          model: validated.model === undefined ? undefined : validated.model || null,
+          serialNumber: validated.serialNumber === undefined ? undefined : validated.serialNumber || null,
+          commissionedAt: validated.commissionedAt === undefined ? undefined : validated.commissionedAt ? new Date(validated.commissionedAt) : null,
           lastServiceDate: validated.lastServiceDate
             ? new Date(validated.lastServiceDate)
             : undefined,

@@ -25,6 +25,17 @@ export type WorkOrderRecord = {
   parts: Array<{ name: string; needed: number; onHand: number | null; unit: string | null }>;
   /** Who it can be assigned to: the workspace's active people. */
   technicians: Array<{ id: string; name: string }>;
+  /** A breakdown, or a service a plan raised (and which). */
+  kind: "BREAKDOWN" | "PREVENTIVE";
+  plan: { id: string; name: string } | null;
+  scheduledFor: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  workDone: string | null;
+  partsCost: number;
+  laborCost: number;
+  /** The machine's meter: what it counts, where it is now, and where it was when the work was done. */
+  meter: { type: "NONE" | "HOURS" | "KM"; current: number | null; atService: number | null };
 };
 
 type Db = Pick<PrismaClient, "workOrder" | "inventoryItem" | "employee">;
@@ -44,8 +55,16 @@ export async function readWorkOrderRecord(db: Db, companyId: string, id: string)
       vaneNote: true,
       partsUsed: true,
       downtimeStart: true,
+      downtimeEnd: true,
       createdAt: true,
-      equipment: { select: { id: true, name: true, equipmentCode: true, site: { select: { name: true } } } },
+      kind: true,
+      scheduledFor: true,
+      workDone: true,
+      partsCost: true,
+      laborCost: true,
+      meterAtService: true,
+      plan: { select: { id: true, name: true } },
+      equipment: { select: { id: true, name: true, equipmentCode: true, meterType: true, currentMeter: true, site: { select: { name: true } } } },
       technician: { select: { id: true, name: true } },
       createdBy: { select: { name: true } },
     },
@@ -92,5 +111,18 @@ export async function readWorkOrderRecord(db: Db, companyId: string, id: string)
       return { name: part.name, needed: part.quantity, onHand: item ? Number(item.currentStock) : null, unit: item?.unit ?? null };
     }),
     technicians,
+    kind: order.kind,
+    plan: order.plan,
+    scheduledFor: order.scheduledFor?.toISOString() ?? null,
+    startedAt: order.downtimeStart.toISOString(),
+    endedAt: order.downtimeEnd?.toISOString() ?? null,
+    workDone: order.workDone,
+    partsCost: order.partsCost ?? 0,
+    laborCost: order.laborCost ?? 0,
+    meter: {
+      type: order.equipment.meterType,
+      current: order.equipment.currentMeter === null ? null : Number(order.equipment.currentMeter),
+      atService: order.meterAtService === null ? null : Number(order.meterAtService),
+    },
   };
 }

@@ -43,10 +43,21 @@ describe("proxy on the admin host", () => {
     vi.stubEnv("VERCEL", "");
     vi.stubEnv("ADMIN_PORTAL_HOST", ADMIN_HOST);
     vi.stubEnv("ADMIN_ROOT_DOMAIN", "admin.pagka.dev");
+    // The existing NextAuth routes must not depend on a second auth provider.
+    vi.stubEnv("WORKOS_API_KEY", "");
+    vi.stubEnv("WORKOS_CLIENT_ID", "");
+    vi.stubEnv("WORKOS_COOKIE_PASSWORD", "");
+    vi.stubEnv("NEXT_PUBLIC_WORKOS_REDIRECT_URI", "");
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it("serves public pages without WorkOS configuration", async () => {
+    const response = await request("/home");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
   });
 
   it("sends a workspace owner's session to the operator sign-in, not into the portal", async () => {

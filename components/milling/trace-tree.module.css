@@ -1,0 +1,21 @@
+/* Trace: one row a step, the kind in a fixed column so codes line up down the tree. */
+.tree { list-style: none; margin: 0; padding: 4px 0; }
+.row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 16px 9px calc(16px + var(--depth, 0) * 20px);
+  border-bottom: 1px solid var(--line, var(--border));
+}
+.tree > li:last-child > .row { border-bottom: 0; }
+.kind { font-size: 12px; color: var(--ink-3, var(--muted-foreground)); }
+.what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code { font-family: var(--font-mono); font-size: 13px; }
+.label { color: var(--ink-2, var(--muted-foreground)); }
+.qty { font-family: var(--font-mono); font-size: 13px; text-align: right; white-space: nowrap; }
+.search { display: flex; gap: 8px; width: min(560px, 100%); }
+@media (max-width: 719px) {
+  .row { grid-template-columns: minmax(0, 1fr) auto; padding-left: calc(16px + var(--depth, 0) * 12px); }
+  .kind { grid-column: 1 / -1; }
+}

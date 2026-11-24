@@ -4,7 +4,8 @@ import * as React from "react";
 import { useSession } from "next-auth/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { canRetailRoleDo } from "@/lib/retail/permission-matrix";
+import { featureGrantHeld } from "@/lib/platform/feature-grants";
+import { canRetailRoleDo, type RetailAction, type RetailResource } from "@/lib/retail/permission-matrix";
 import { SHEET_KINDS } from "@/lib/retail/sheet-kinds";
 import type { SheetCtx, SheetKind } from "@/lib/workspace/sheet-kind";
 
@@ -43,6 +44,7 @@ function Host() {
   const userId = session?.user?.id ?? null;
   const userName = session?.user?.name ?? "";
   const role = session?.user?.role ?? "";
+  const enabledFeatures = (session?.user as { enabledFeatures?: string[] } | undefined)?.enabledFeatures;
 
   const key = searchParams.get("sheet");
   const kind: SheetKind | undefined = key ? SHEET_KINDS[key] : undefined;
@@ -57,10 +59,15 @@ function Host() {
       params,
       id: params.get("id"),
       user: { id: userId, name: userName, role },
-      can: (resource, action) => canRetailRoleDo(role, resource, action),
+      // An extension's grants are its own sheet host's to answer; here they are not held.
+      can: (resource, action) => {
+        if (resource.startsWith("ext:")) return false;
+        const byFeature = featureGrantHeld([resource, action], enabledFeatures);
+        return byFeature ?? canRetailRoleDo(role, resource as RetailResource, action as RetailAction);
+      },
       ...(list.length > 0 ? { step: { id: list[at]!, at, count: list.length } } : {}),
     };
-  }, [search, userId, userName, role, kind]);
+  }, [search, userId, userName, role, enabledFeatures, kind]);
 
   const allowed = Boolean(kind && ctx && kind.requires.some(([resource, action]) => ctx.can(resource, action)));
   // A stepping sheet opens afresh on each item of its list.

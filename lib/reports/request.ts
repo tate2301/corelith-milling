@@ -1,3 +1,5 @@
+import { featureGrantHeld } from "@/lib/platform/feature-grants";
+import { extensionGrantChecks, extensionGrantHeld, type ExtensionGrantChecks } from "@/lib/extensions/grants-server";
 import { canReadReport } from "@/lib/reports/access";
 import { reportMeta } from "@/lib/reports/catalog";
 import {
@@ -107,8 +109,12 @@ export function paramsFromSearch(search: URLSearchParams): ReportParams {
    Lists (00-foundations 4.1)
    ────────────────────────────────────────────────────────────────────────── */
 
-/** The caller as the list engine asks about them: the matrix, cost, the clock, the zone. */
-export function listContext(session: AuthenticatedSession, now = new Date()): ListContext {
+/**
+ * The caller as the list engine asks about them: the matrix, cost, the clock,
+ * the zone. `extensions` answers grants written `["ext:<id>", action]`; read
+ * it with `extensionGrantsFor` (without it, every such grant is refused).
+ */
+export function listContext(session: AuthenticatedSession, now = new Date(), extensions: ExtensionGrantChecks = {}): ListContext {
   const role = session.user.role;
   const enabledFeatures = session.user.enabledFeatures ?? [];
   return {
@@ -118,16 +124,18 @@ export function listContext(session: AuthenticatedSession, now = new Date()): Li
     timeZone: DEFAULT_TIME_ZONE,
     can: (grant) => {
       if (grant[0] === "admin") return false;
-      if (grant[0].startsWith("crm.")) {
-        return enabledFeatures.some((f) => f.startsWith("crm."));
-      }
-      if (grant[0].startsWith("stores.")) {
-        return enabledFeatures.some((f) => f.startsWith("stores."));
-      }
+      if (grant[0].startsWith("ext:")) return extensionGrantHeld(extensions, grant);
+      const byFeature = featureGrantHeld(grant, enabledFeatures);
+      if (byFeature !== null) return byFeature;
       return canRetailSessionDo(session, grant[0], grant[1]);
     },
     seeCost: canSeeRetailCostPrice(retailRoleKey(session)),
   };
+}
+
+/** This caller's extension permissions, for `listContext`. */
+export function extensionGrantsFor(session: AuthenticatedSession): Promise<ExtensionGrantChecks> {
+  return extensionGrantChecks({ userId: session.user.id, companyId: session.user.companyId, role: session.user.role ?? null });
 }
 
 /** Why a list was not answered: the same 404 for "no such list" and "not for you", 403 for the list's own check. */
@@ -190,7 +198,7 @@ async function openList(session: AuthenticatedSession, key: string, query: ListQ
   const report = getReport(key);
   if (!report) return { status: 404, error: "Report not found" };
   const { definition: declared, loader } = report;
-  const ctx = listContext(session);
+  const ctx = listContext(session, new Date(), await extensionGrantsFor(session));
   const facingSpec = query.face === "report" ? declared.report : declared.list;
   if (facingSpec?.filters.some((filter) => filter.type === "choice" && filter.defaultFrom === "default-site")) {
     ctx.defaultSite = await defaultSiteFor(contextFor(session).companyId, session.user.id);

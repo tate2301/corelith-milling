@@ -1,0 +1,4 @@
+/* The mill Overview's four day tiles sit two to a row on a phone, as Retail's do. */
+@media (max-width: 719px) {
+  .cx-df-grid[aria-label="Overview"] > .cx-df-kpi.cx-df-span-3 { grid-column: span 6; }
+}

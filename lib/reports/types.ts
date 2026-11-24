@@ -234,10 +234,21 @@ export type ReportView = {
 export type RetailListGrant = [RetailResource, RetailAction];
 /** A grant from the admin portal's operator roles (`lib/operators/roles`), for the admin's lists. */
 export type AdminListGrant = ["admin", OperatorAction];
-export type FeatureResource = "crm.core" | "crm.documents" | "stores.catalogue" | "stores.inventory";
+export type FeatureResource =
+  | "crm.core"
+  | "crm.documents"
+  | "stores.catalogue"
+  | "stores.inventory"
+  | "maintenance.dashboard"
+  | "maintenance.equipment"
+  | "maintenance.work-orders"
+  | "maintenance.breakdowns"
+  | "maintenance.schedule";
 export type FeatureAction = "view" | "create" | "update" | "delete";
 export type FeatureListGrant = [FeatureResource, FeatureAction];
-export type ListGrant = RetailListGrant | AdminListGrant | FeatureListGrant;
+/** An extension's own permission (`["ext:milling", "intake.approve"]`), answered by its `registeredExtensionGrants` entry. */
+export type ExtensionListGrant = [`ext:${string}`, string];
+export type ListGrant = RetailListGrant | AdminListGrant | FeatureListGrant | ExtensionListGrant;
 
 /** How a judgement is coloured. Colour always comes with a word. */
 export type Tone = "ok" | "warn" | "bad" | "info" | "neutral" | "hollow" | "pending" | "gold";

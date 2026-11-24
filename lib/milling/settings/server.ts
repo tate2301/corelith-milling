@@ -415,6 +415,9 @@ export async function getGeneralSettings(db: PrismaClient, companyId: string) {
     defaultIntakeBagKg: Number(row.defaultIntakeBagKg),
     shiftHours: Number(row.shiftHours),
     shiftCrewSize: row.shiftCrewSize,
+    sellerMaxDiscount: Number(row.sellerMaxDiscount),
+    sellerDiscountStep: Number(row.sellerDiscountStep),
+    extractionTargetPct: Number(row.extractionTargetPct),
   };
 }
 

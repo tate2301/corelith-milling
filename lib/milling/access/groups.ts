@@ -34,6 +34,10 @@ export const MILL_CAPABILITIES = [
   "delivery.manage",
   "delivery.own",
   "fuel.record",
+  "seller.manage",
+  "visit.record",
+  "collection.record",
+  "sale.record",
   "settings.manage",
 ] as const;
 
@@ -47,6 +51,8 @@ export const MILL_GROUP_CODES = [
   "OPERATOR",
   "DISPATCH",
   "DRIVER",
+  "SALES_REP",
+  "DIRECTOR",
   "ADMIN",
 ] as const;
 
@@ -64,7 +70,7 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "MANAGEMENT",
     name: "Management",
     description: "Approves plans, decides on exceptions and significant adjustments, and sees everything.",
-    capabilities: ["plan.edit", "plan.approve", "exception.decide", "stock.adjust.approve", "shift.approve", "batch.approve"],
+    capabilities: ["plan.edit", "plan.approve", "exception.decide", "stock.adjust.approve", "shift.approve", "batch.approve", "collection.record", "sale.record"],
   },
   {
     code: "SUPERVISOR",
@@ -75,8 +81,8 @@ export const MILL_GROUPS: readonly MillGroup[] = [
   {
     code: "STORES",
     name: "Receiving and stores",
-    description: "Receives maize, records weights, stores, moves and counts stock.",
-    capabilities: ["intake.record", "stock.move", "stock.count"],
+    description: "Receives maize, records weights, stores, moves and counts stock, and sells bags at the till.",
+    capabilities: ["intake.record", "stock.move", "stock.count", "seller.manage", "sale.record"],
   },
   {
     code: "QUALITY",
@@ -94,13 +100,25 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "DISPATCH",
     name: "Dispatch officer",
     description: "Takes orders, plans deliveries, checks loading and dispatches.",
-    capabilities: ["order.manage", "delivery.manage"],
+    capabilities: ["order.manage", "delivery.manage", "seller.manage"],
   },
   {
     code: "DRIVER",
     name: "Driver",
     description: "Records the outcome of their own deliveries, proof of delivery and fuel.",
     capabilities: ["delivery.own", "fuel.record"],
+  },
+  {
+    code: "SALES_REP",
+    name: "Sales rep",
+    description: "Works a route: visits shops, records the market survey, chases what they owe and sells bags at the till.",
+    capabilities: ["visit.record", "collection.record", "sale.record"],
+  },
+  {
+    code: "DIRECTOR",
+    name: "Director",
+    description: "Reads the whole mill and its reports; decides nothing at the mill.",
+    capabilities: [],
   },
   {
     code: "ADMIN",
