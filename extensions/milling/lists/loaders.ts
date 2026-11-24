@@ -6,6 +6,8 @@ import { targetHref } from "@/components/milling/targets";
 import { listRoutes, listTrips, vehicleLabels } from "@/lib/milling/distribution/trips";
 import { followWorkshop } from "@/lib/milling/maintenance/equipment";
 import { checkWeightSummary } from "@/lib/milling/production/packing";
+import { SETTINGS_RESOURCES } from "@/lib/milling/settings/fields";
+import { listSettings } from "@/lib/milling/settings/server";
 import { millSite, stockOnHand } from "@/lib/milling/stock/views";
 import { commissionStatement } from "@/lib/milling/books/commission-statement";
 import { balancesOf, collections, listVisits } from "@/lib/milling/customers/customers";
@@ -1141,7 +1143,39 @@ const lotCounts: ReportLoader = {
   },
 };
 
+/** Each mill settings list: its rows, values written as the list shows them. */
+const settingsLoaders: Record<string, ReportLoader> = Object.fromEntries(
+  SETTINGS_RESOURCES.map((resource) => [
+    `milling-setting-${resource.key}`,
+    {
+      load: async (ctx) => {
+        const { rows, options } = (await listSettings(prisma, ctx.companyId, resource.key)) as { rows: Array<Record<string, unknown> & { id: string }>; options: Record<string, Array<{ value: string; label: string }>> };
+        return result(
+          rows.map((row): ReportRow => {
+            const out: ReportRow = { id: row.id };
+            for (const field of resource.fields) {
+              const raw = row[field.key];
+              out[field.key] =
+                field.type === "boolean"
+                  ? raw ? "Yes" : "No"
+                  : field.type === "list"
+                    ? Array.isArray(raw) ? raw.join(", ") : null
+                    : field.type === "select"
+                      ? ((field.options as Array<{ value: string; label: string }> | undefined) ?? options[field.key] ?? []).find((option) => option.value === raw)?.label ?? null
+                      : field.type === "number"
+                        ? raw === null || raw === undefined ? null : Number(raw)
+                        : raw === null || raw === undefined ? null : String(raw);
+            }
+            return out;
+          }),
+        );
+      },
+    } satisfies ReportLoader,
+  ]),
+);
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
+  ...settingsLoaders,
   "milling-trip-list": trips,
   "milling-intake-list": intake,
   "milling-exception-list": exceptions,
