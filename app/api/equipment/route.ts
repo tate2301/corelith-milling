@@ -21,6 +21,11 @@ const equipmentSchema = z.object({
   /** What the meter counts; a vehicle's plate. Readings go through /api/equipment/[id]/meter-readings. */
   meterType: z.enum(["NONE", "HOURS", "KM"]).optional(),
   registrationNumber: z.string().trim().max(20).nullable().optional(),
+  kind: z.enum(["MACHINE", "VEHICLE"]).optional(),
+  make: z.string().trim().max(80).nullable().optional(),
+  model: z.string().trim().max(80).nullable().optional(),
+  serialNumber: z.string().trim().max(80).nullable().optional(),
+  commissionedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -132,6 +137,11 @@ export async function POST(request: NextRequest) {
         isActive: validated.isActive ?? true,
         meterType: validated.meterType ?? "NONE",
         registrationNumber: validated.registrationNumber || null,
+        kind: validated.kind ?? (validated.registrationNumber || validated.category.toUpperCase() === "VEHICLE" ? "VEHICLE" : "MACHINE"),
+        make: validated.make || null,
+        model: validated.model || null,
+        serialNumber: validated.serialNumber || null,
+        commissionedAt: validated.commissionedAt ? new Date(validated.commissionedAt) : null,
         lastServiceDate: validated.lastServiceDate ? new Date(validated.lastServiceDate) : undefined,
         nextServiceDue: validated.nextServiceDue ? new Date(validated.nextServiceDue) : undefined,
       },

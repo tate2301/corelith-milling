@@ -234,7 +234,16 @@ export type ReportView = {
 export type RetailListGrant = [RetailResource, RetailAction];
 /** A grant from the admin portal's operator roles (`lib/operators/roles`), for the admin's lists. */
 export type AdminListGrant = ["admin", OperatorAction];
-export type FeatureResource = "crm.core" | "crm.documents" | "stores.catalogue" | "stores.inventory";
+export type FeatureResource =
+  | "crm.core"
+  | "crm.documents"
+  | "stores.catalogue"
+  | "stores.inventory"
+  | "maintenance.dashboard"
+  | "maintenance.equipment"
+  | "maintenance.work-orders"
+  | "maintenance.breakdowns"
+  | "maintenance.schedule";
 export type FeatureAction = "view" | "create" | "update" | "delete";
 export type FeatureListGrant = [FeatureResource, FeatureAction];
 /** An extension's own permission (`["ext:milling", "intake.approve"]`), answered by its `registeredExtensionGrants` entry. */

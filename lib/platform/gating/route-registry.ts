@@ -52,6 +52,8 @@ const CORE_PAGE_FEATURE_ROUTES: FeatureRouteEntry[] = [
   { scope: "page", prefix: "/maintenance/equipment", featureKey: "maintenance.equipment" },
   { scope: "page", prefix: "/maintenance/breakdown", featureKey: "maintenance.breakdowns" },
   { scope: "page", prefix: "/maintenance/schedule", featureKey: "maintenance.schedule" },
+  { scope: "page", prefix: "/maintenance/technicians", featureKey: "maintenance.work-orders" },
+  { scope: "page", prefix: "/maintenance/fuel", featureKey: "maintenance.equipment" },
   { scope: "page", prefix: "/maintenance", featureKey: "maintenance.dashboard" },
 
   { scope: "page", prefix: "/stores/movements", featureKey: "stores.movements" },
@@ -558,6 +560,13 @@ const CORE_API_FEATURE_ROUTES: FeatureRouteEntry[] = [
   { scope: "api", prefix: "/api/v2/crm", featureKey: "crm.core" },
 
   { scope: "api", prefix: "/api/work-orders", featureKey: "maintenance.work-orders" },
+  { scope: "api", prefix: "/api/maintenance/plans", featureKey: "maintenance.schedule" },
+  { scope: "api", prefix: "/api/maintenance/calendar", featureKey: "maintenance.schedule" },
+  { scope: "api", prefix: "/api/maintenance/work-orders", featureKey: "maintenance.work-orders" },
+  { scope: "api", prefix: "/api/maintenance/technicians", featureKey: "maintenance.work-orders" },
+  { scope: "api", prefix: "/api/maintenance/home", featureKey: "maintenance.dashboard" },
+  { scope: "api", prefix: "/api/maintenance/lookups", featureKey: "maintenance.equipment" },
+  { scope: "api", prefix: "/api/maintenance/equipment", featureKey: "maintenance.equipment" },
   { scope: "api", prefix: "/api/equipment", featureKey: "maintenance.equipment" },
   { scope: "api", prefix: "/api/analytics/downtime", featureKey: "reports.downtime-analytics" },
   { scope: "api", prefix: "/api/downtime-codes", featureKey: "maintenance.breakdowns" },

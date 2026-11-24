@@ -167,10 +167,11 @@ const DEFAULT_MODULE_PRESENTATION: Record<WorkspaceModuleId, WorkspaceModulePres
     description: "",
     tabLabels: {
       dashboard: "Overview",
-      equipment: "Equipment Register",
-      "work-orders": "Work Orders",
-      breakdown: "Log Breakdown",
-      schedule: "PM Schedule",
+      equipment: "Machinery and vehicles",
+      "work-orders": "Work orders",
+      schedule: "Preventive maintenance",
+      technicians: "Technicians",
+      fuel: "Fuel log",
     },
   },
   reporting: {

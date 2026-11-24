@@ -1,3 +1,4 @@
+import type { FeatureListGrant } from "@/lib/reports/types";
 import type { BinKind, BinState } from "@/lib/retail/bin";
 import type { RetailAction, RetailResource } from "@/lib/retail/permission-matrix";
 import type { Ask } from "@/lib/workspace/ask";
@@ -15,7 +16,8 @@ import type { Ask } from "@/lib/workspace/ask";
  * "intake.approve"]`), which the page answers through RecordFrame's
  * `extensionCan`; without it an extension grant is not held.
  */
-export type Grant = [RetailResource, RetailAction] | [`ext:${string}`, string];
+/** A retail grant, a feature grant (`["maintenance.work-orders", "update"]`, lib/platform/feature-grants.ts), or an extension's own. */
+export type Grant = [RetailResource, RetailAction] | FeatureListGrant | [`ext:${string}`, string];
 
 /**
  * What an action does: open a sheet over the record (with the record's id

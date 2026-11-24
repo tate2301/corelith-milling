@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { refreshPlansFor } from "@/lib/maintenance/plans";
 import { prisma } from "@/lib/prisma";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -65,6 +66,8 @@ export async function recordMeterReading(input: RecordMeterReadingInput, db: Db 
   });
   if (latest) {
     await db.equipment.update({ where: { id: equipment.id }, data: { currentMeter: reading, meterReadAt: readAt } });
+    // The meter moved: plans counted on it come due sooner or later.
+    await refreshPlansFor(db, equipment.id, readAt);
   }
   return row;
 }

@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Coins,
   Dashboard,
+  Fuel,
   Dataset,
   EventNote,
   Factory,
@@ -495,24 +496,17 @@ export const navSections: NavSection[] = [
     title: "Assets",
     description: "Equipment, work orders, scheduling",
     featureKey: "maintenance.dashboard",
+    // Shaped as Stock and Books are: a homepage, the register, the work, the
+    // preventive calendar, the people who do the work and the fuel. Logging a
+    // breakdown is a sheet, so it is a primary button, not a row.
     items: [
       { href: "/maintenance", icon: Dashboard, label: "Overview" },
-      {
-        href: "/maintenance/equipment",
-        icon: Wrench,
-        label: "Equipment",
-      },
-      {
-        href: "/maintenance/work-orders",
-        icon: Checklist,
-        label: "Work Orders",
-      },
-      {
-        href: "/maintenance/breakdown",
-        icon: ReportProblem,
-        label: "Log Breakdown",
-      },
-      { href: "/maintenance/schedule", icon: Calendar, label: "PM Schedule" },
+      { href: "/maintenance/equipment", icon: Wrench, label: "Machinery and vehicles" },
+      { href: "/maintenance/work-orders", icon: Checklist, label: "Work orders" },
+      { href: "/maintenance/schedule", icon: Calendar, label: "Preventive maintenance" },
+      { href: "/maintenance/technicians", icon: Users, label: "Technicians" },
+      { href: "/maintenance/fuel", icon: Fuel, label: "Fuel log" },
+      { href: "/maintenance/fuel/usage", icon: Fuel, label: "Fuel usage" },
     ],
   },
   {

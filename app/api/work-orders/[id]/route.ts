@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { validateSession, successResponse, errorResponse } from "@/lib/api-utils";
 import { postMoney, recordEvent } from "@/lib/books/core";
+import { MeterRefusal, recordMeterReading } from "@/lib/maintenance/meters";
+import { serviceDone } from "@/lib/maintenance/plans";
 import { readWorkOrderRecord } from "@/lib/maintenance/work-order-record";
 import { partSchema } from "@/lib/maintenance/work-orders";
 import { emitWorkOrderStatusNotification } from "@/lib/notifications";
@@ -27,6 +29,8 @@ const updateWorkOrderSchema = z.object({
   technicianId: z.string().uuid().nullable().optional(),
   status: z.enum(["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),
   priority: z.enum(["NORMAL", "HIGH", "URGENT"]).optional(),
+  /** The meter when the work was done: kept on the order, read onto the machine, and a service's plan counts on from it. */
+  meterAtService: z.number().min(0).nullable().optional(),
 });
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -116,6 +120,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           validated.technicianId !== undefined ? validated.technicianId : undefined,
         status: validated.status,
         priority: validated.priority,
+        meterAtService: validated.meterAtService === undefined ? undefined : validated.meterAtService,
       },
       include: {
         equipment: {
@@ -143,6 +148,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           },
         },
       });
+    }
+
+    if (validated.meterAtService !== undefined && validated.meterAtService !== null && updated.equipment.meterType !== "NONE") {
+      try {
+        await recordMeterReading({ companyId: session.user.companyId, equipmentId: updated.equipmentId, reading: validated.meterAtService, source: "SERVICE", sourceId: updated.id, recordedById: session.user.id });
+      } catch (error) {
+        if (error instanceof MeterRefusal) return errorResponse(error.message, 400);
+        throw error;
+      }
+    }
+
+    if (validated.status === "COMPLETED" && existing.status !== "COMPLETED") {
+      // A service done: its plan moves on to its next due (lib/maintenance/plans.ts).
+      await serviceDone(prisma, { workOrderId: updated.id, doneAt: updated.downtimeEnd ?? new Date() });
     }
 
     if (validated.status === "COMPLETED") {

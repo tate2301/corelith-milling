@@ -1,3 +1,4 @@
+import { featureGrantHeld } from "@/lib/platform/feature-grants";
 import { extensionGrantChecks, extensionGrantHeld, type ExtensionGrantChecks } from "@/lib/extensions/grants-server";
 import { canReadReport } from "@/lib/reports/access";
 import { reportMeta } from "@/lib/reports/catalog";
@@ -124,12 +125,8 @@ export function listContext(session: AuthenticatedSession, now = new Date(), ext
     can: (grant) => {
       if (grant[0] === "admin") return false;
       if (grant[0].startsWith("ext:")) return extensionGrantHeld(extensions, grant);
-      if (grant[0].startsWith("crm.")) {
-        return enabledFeatures.some((f) => f.startsWith("crm."));
-      }
-      if (grant[0].startsWith("stores.")) {
-        return enabledFeatures.some((f) => f.startsWith("stores."));
-      }
+      const byFeature = featureGrantHeld(grant, enabledFeatures);
+      if (byFeature !== null) return byFeature;
       return canRetailSessionDo(session, grant[0], grant[1]);
     },
     seeCost: canSeeRetailCostPrice(retailRoleKey(session)),
