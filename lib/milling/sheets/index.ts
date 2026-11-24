@@ -6,6 +6,7 @@ import { EXCEPTION_SHEETS } from "./exceptions";
 import { MACHINE_SHEETS } from "./machines";
 import { PLAN_SHEETS } from "./plans";
 import { PRODUCTION_SHEETS } from "./production";
+import { TRIP_SHEETS } from "./trip";
 
 /**
  * The mill's sheets, by the `?sheet=` key that opens them. Every key starts
@@ -18,4 +19,5 @@ export const MILL_SHEETS: Readonly<Record<string, SheetKind>> = {
   ...PLAN_SHEETS,
   ...CUSTOMER_SHEETS,
   ...MACHINE_SHEETS,
+  ...TRIP_SHEETS,
 };

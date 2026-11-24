@@ -549,6 +549,48 @@ const generator: ReportLoader = {
   },
 };
 
+/** A trip's stops: its lines by order, with what each delivered and what it is worth. Without a trip, nothing. */
+const stops: ReportLoader = {
+  load: async (ctx, params) => {
+    const deliveryId = params.delivery;
+    if (!deliveryId) return result([]);
+    const delivery = await prisma.millingDelivery.findFirst({ where: { id: deliveryId, companyId: ctx.companyId }, include: { lines: true } });
+    if (!delivery) return result([]);
+    const [orders, orderLines, products, lots] = await Promise.all([
+      prisma.millingCustomerOrder.findMany({ where: { companyId: ctx.companyId, id: { in: delivery.lines.map((line) => line.orderId) } }, select: { id: true, code: true, customerId: true } }),
+      prisma.millingCustomerOrderLine.findMany({ where: { id: { in: delivery.lines.map((line) => line.orderLineId) } }, select: { id: true, unitPrice: true } }),
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: delivery.lines.map((line) => line.productId) } }, select: { id: true, name: true } }),
+      prisma.millingLot.findMany({ where: { companyId: ctx.companyId, id: { in: delivery.lines.map((line) => line.lotId) } }, select: { id: true, code: true } }),
+    ]);
+    const customers = await prisma.customer.findMany({ where: { companyId: ctx.companyId, id: { in: orders.map((order) => order.customerId) } }, select: { id: true, name: true } });
+    const proven = ["DELIVERED", "CLOSED"].includes(delivery.status);
+    return result(
+      delivery.lines.map((line, index): ReportRow => {
+        const order = orders.find((entry) => entry.id === line.orderId);
+        const price = Number(orderLines.find((entry) => entry.id === line.orderLineId)?.unitPrice ?? 0);
+        const delivered = line.deliveredBags;
+        const state = !proven ? "Loaded" : !delivered ? "Not delivered" : line.shortBags || line.damagedBags || line.returnedBags ? "Short" : "Delivered";
+        return {
+          id: line.id,
+          deliveryId: delivery.id,
+          order: `${String(index + 1).padStart(2, "0")} ${order?.code ?? ""}`.trim(),
+          customerId: order?.customerId ?? null,
+          customer: customers.find((customer) => customer.id === order?.customerId)?.name ?? null,
+          product: products.find((product) => product.id === line.productId)?.name ?? null,
+          lot: lots.find((lot) => lot.id === line.lotId)?.code ?? null,
+          state,
+          bags: line.bags,
+          delivered: proven ? delivered : null,
+          short: proven ? line.shortBags || null : null,
+          damaged: proven ? line.damagedBags || null : null,
+          returned: proven ? line.returnedBags || null : null,
+          value: price ? Math.round(price * (proven ? (delivered ?? 0) : line.bags) * 100) / 100 : null,
+        };
+      }),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-trip-list": trips,
   "milling-intake-list": intake,
@@ -565,4 +607,5 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-visit-list": visits,
   "milling-downtime-list": downtime,
   "milling-generator-list": generator,
+  "milling-delivery-lines": stops,
 };
