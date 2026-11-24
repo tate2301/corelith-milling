@@ -19,6 +19,7 @@ import { loadMillAccess } from "@/lib/milling/access/server";
 import { waitingFor } from "@/lib/milling/reports/home";
 import { MILL_GROUPS } from "@/lib/milling/access/groups";
 import { listMillMembers } from "@/lib/milling/access/membership";
+import { currentOpening, goLiveSteps, openingView } from "@/lib/milling/setup/go-live";
 
 /** The mill's clock: Zimbabwe has one zone. */
 const ZONE = "Africa/Harare";
@@ -1225,6 +1226,42 @@ const groupMembers: ReportLoader = {
   },
 };
 
+const STEP_STATE: Record<string, string> = { DONE: "Done", STARTED: "Started", WAITING: "Waiting", NOT_STARTED: "Not started" };
+
+/** Go-live: the seven steps, through the same reader as the go-live API. */
+const goLive: ReportLoader = {
+  load: async (ctx) =>
+    result(
+      (await goLiveSteps(prisma, ctx.companyId)).map(
+        (row, index): ReportRow => ({ id: row.key, order: index + 1, step: row.step, layer: row.layer, owner: row.owner, stateKey: row.state, state: STEP_STATE[row.state] ?? row.state, detail: row.detail, href: row.href }),
+      ),
+    ),
+};
+
+/** Go-live › Opening stock: the counts on the current opening stock. */
+const openingLines: ReportLoader = {
+  load: async (ctx) => {
+    const opening = await currentOpening(prisma, { companyId: ctx.companyId, userId: ctx.userId });
+    if (!opening) return result([]);
+    const view = await openingView(prisma, { companyId: ctx.companyId, userId: ctx.userId, openingId: opening.id });
+    const unit: Record<string, string> = { KILOGRAM: "kg", BAG: "bags", TONNE: "t", LITRE: "L", EACH: "each" };
+    return result(
+      view.lines.map(
+        (line): ReportRow => ({
+          id: line.id,
+          openingId: opening.id,
+          product: line.product,
+          place: line.place,
+          counted: `${line.quantity.toLocaleString("en-GB")} ${unit[line.unit ?? ""] ?? ""}`.trim(),
+          unitCost: line.unitCost,
+          value: line.value,
+          postedKey: line.posted ? "yes" : "no",
+        }),
+      ),
+    );
+  },
+};
+
 export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   ...settingsLoaders,
   "milling-trip-list": trips,
@@ -1232,6 +1269,8 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-exception-list": exceptions,
   "milling-waiting": waiting,
   "milling-setting-groups": groupMembers,
+  "milling-go-live": goLive,
+  "milling-opening-lines": openingLines,
   "milling-run-list": runs,
   "milling-packing-list": packing,
   "milling-test-list": tests,
