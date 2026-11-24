@@ -1,3 +1,4 @@
+import type { FeatureListGrant } from "@/lib/reports/types";
 import type { ZodType } from "zod";
 
 import type { RetailAction, RetailResource } from "@/lib/retail/permission-matrix";
@@ -22,7 +23,7 @@ export type SheetCtx = {
    * A retail grant, or an extension's own (`"ext:milling", "intake.record"`):
    * core's sheet host answers only retail grants; an extension's host answers its own.
    */
-  can: (resource: RetailResource | `ext:${string}`, action: RetailAction | (string & {})) => boolean;
+  can: (resource: RetailResource | FeatureListGrant[0] | `ext:${string}`, action: RetailAction | (string & {})) => boolean;
   /** A stepping kind's place in its list: the item now (from `stepping.param`), and where it is ("1 of 3"). */
   step?: { id: string; at: number; count: number };
 };
@@ -388,5 +389,5 @@ export type SheetKind = {
   /** React Query keys to refetch after a save. */
   invalidate: string[][];
   /** Any one of these, or the sheet does not open (labels: change the catalogue, or adjust stock). */
-  requires: Array<[RetailResource, RetailAction] | [`ext:${string}`, string]>;
+  requires: Array<[RetailResource, RetailAction] | FeatureListGrant | [`ext:${string}`, string]>;
 };

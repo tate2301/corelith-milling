@@ -2,6 +2,7 @@ import { registeredExtensionLoaders } from "@/extensions/server";
 import { mergeReportLoaders } from "@/lib/extensions/registry";
 import { BOOKS_LOADERS } from "@/lib/reports/loaders/books";
 import { CRM_LOADERS } from "@/lib/reports/loaders/crm";
+import { MAINTENANCE_LOADERS } from "@/lib/reports/loaders/maintenance";
 import { OPERATIONS_LOADERS } from "@/lib/reports/loaders/operations";
 import { PEOPLE_LOADERS } from "@/lib/reports/loaders/people";
 import { RETAIL_LOADERS } from "@/lib/reports/loaders/retail";
@@ -16,6 +17,7 @@ const CORE_LOADERS: Record<string, ReportLoader> = {
   ...CRM_LOADERS,
   ...PEOPLE_LOADERS,
   ...BOOKS_LOADERS,
+  ...MAINTENANCE_LOADERS,
 };
 
 /** Core's loaders, then the extensions' (`extensions/server.ts`). */

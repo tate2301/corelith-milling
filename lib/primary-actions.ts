@@ -73,7 +73,7 @@ const PRODUCT_PRIMARY_ACTIONS: Record<VerticalProductId, NavItem[]> = {
     { href: "/reports/insights/sales", icon: BarChart3, label: "Insights" },
   ],
   "service-workshop": [
-    { href: "/maintenance/breakdown", icon: ReportProblem, label: "Log Breakdown" },
+    { href: "/maintenance/work-orders?sheet=maint-breakdown", icon: ReportProblem, label: "Log a breakdown" },
     { href: "/maintenance/work-orders", icon: Wrench, label: "Work Orders" },
     { href: "/stores/receive", icon: ArrowDownward, label: "Receive Stock" },
     { href: "/stores/issue", icon: ArrowUpward, label: "Issue Stock" },

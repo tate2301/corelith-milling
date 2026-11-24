@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/workspace/confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { ApiError, fetchJson, getApiErrorMessage } from "@/lib/api-client";
 import { binAsk } from "@/lib/retail/asks";
+import { featureGrantHeld } from "@/lib/platform/feature-grants";
 import { canRetailSessionDo } from "@/lib/retail/permission-matrix";
 import type { Grant, RailEdit, RecordAction, RecordBanner, RecordKind } from "@/lib/retail/record-kinds/types";
 import type { Ask } from "@/lib/workspace/ask";
@@ -77,11 +78,13 @@ export function RecordFrame<R>({
   const hydrated = useHydrated();
   const record = hydrated ? query.data : undefined;
 
-  const user = session?.user as { id?: string; role?: string; supportSessionId?: string | null } | undefined;
+  const user = session?.user as { id?: string; role?: string; supportSessionId?: string | null; enabledFeatures?: string[] } | undefined;
   const can = React.useCallback(
     (grant: Grant) => {
       if (!user) return false;
       if (isExtensionGrant(grant)) return extensionCan ? extensionCan(grant) : false;
+      const byFeature = featureGrantHeld(grant, user.enabledFeatures);
+      if (byFeature !== null) return byFeature;
       return canRetailSessionDo({ user: { role: user.role, supportSessionId: user.supportSessionId } }, grant[0], grant[1]);
     },
     [user, extensionCan],

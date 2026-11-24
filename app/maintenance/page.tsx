@@ -1,26 +1,18 @@
 import { redirect } from "next/navigation";
-import {
-  MaintenanceContent,
-  type MaintenanceView,
-} from "@/components/maintenance/maintenance-content";
 
-const maintenanceRoutes: Record<MaintenanceView, string> = {
-  dashboard: "/maintenance",
+import { MaintenanceHome } from "@/components/maintenance/maintenance-home";
+
+/** Old `?view=` links land on the page that replaced each view. */
+const VIEWS: Record<string, string> = {
   equipment: "/maintenance/equipment",
   "work-orders": "/maintenance/work-orders",
-  breakdown: "/maintenance/breakdown",
+  breakdown: "/maintenance/work-orders?sheet=maint-breakdown",
   schedule: "/maintenance/schedule",
 };
 
-export default async function MaintenanceDashboardPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ view?: string }>;
-}) {
-  const resolvedSearchParams = await searchParams;
-  const viewParam = resolvedSearchParams?.view as MaintenanceView | undefined;
-  if (viewParam && maintenanceRoutes[viewParam]) {
-    redirect(maintenanceRoutes[viewParam]);
-  }
-  return <MaintenanceContent activeView="dashboard" />;
+/** Assets' homepage (components/maintenance/maintenance-home.tsx). */
+export default async function MaintenanceHomePage({ searchParams }: { searchParams?: Promise<{ view?: string }> }) {
+  const view = (await searchParams)?.view;
+  if (view && VIEWS[view]) redirect(VIEWS[view]);
+  return <MaintenanceHome />;
 }

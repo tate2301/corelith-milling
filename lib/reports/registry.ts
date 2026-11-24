@@ -2,6 +2,7 @@ import { registeredExtensions } from "@/extensions";
 import { mergeReports } from "@/lib/extensions/registry";
 import { BOOKS_REPORTS } from "@/lib/reports/definitions/books";
 import { CRM_REPORTS } from "@/lib/reports/definitions/crm";
+import { MAINTENANCE_LISTS } from "@/lib/reports/definitions/maintenance";
 import { OPERATIONS_REPORTS } from "@/lib/reports/definitions/operations";
 import { PEOPLE_REPORTS } from "@/lib/reports/definitions/people";
 import { RETAIL_REPORTS } from "@/lib/reports/definitions/retail";
@@ -21,6 +22,7 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = mergeReports([
   ...CRM_REPORTS,
   ...PEOPLE_REPORTS,
   ...BOOKS_REPORTS,
+  ...MAINTENANCE_LISTS,
 ], registeredExtensions);
 
 const byKey = new Map(REPORT_DEFINITIONS.map((definition) => [definition.key, definition]));

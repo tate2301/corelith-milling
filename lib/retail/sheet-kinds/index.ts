@@ -1,3 +1,4 @@
+import { MAINTENANCE_SHEETS } from "@/lib/maintenance/sheets";
 import type { SheetKind } from "@/lib/workspace/sheet-kind";
 
 import { BUNDLE_SHEETS } from "./bundles";
@@ -23,6 +24,7 @@ import { VOUCHER_SHEETS } from "./vouchers";
  * Each area adds its kinds in its own file and one line here.
  */
 export const SHEET_KINDS: Readonly<Record<string, SheetKind>> = {
+  ...MAINTENANCE_SHEETS,
   ...FLOOR_SHEETS,
   ...LAYBY_SHEETS,
   ...PRODUCT_SHEETS,

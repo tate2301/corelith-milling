@@ -38,11 +38,14 @@ const routeLabels: Record<string, string> = {
 
 const viewLabels: Record<string, Record<string, string>> = {
   maintenance: {
-    dashboard: "Dashboard",
-    equipment: "Equipment Register",
-    "work-orders": "Work Orders",
-    breakdown: "Log Breakdown",
-    schedule: "PM Schedule",
+    dashboard: "Overview",
+    equipment: "Machinery and vehicles",
+    "work-orders": "Work orders",
+    schedule: "Preventive maintenance",
+    plans: "Plans",
+    technicians: "Technicians",
+    fuel: "Fuel log",
+    usage: "Fuel usage",
   },
   stores: {
     dashboard: "Dashboard",
