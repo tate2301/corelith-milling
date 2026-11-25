@@ -14,7 +14,7 @@ export const GET = millRoute(null, async ({ companyId }) => {
     prisma.millingSettings.findUnique({ where: { companyId } }),
     prisma.customer.findMany({ where: { companyId, isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 1000 }),
     prisma.millingDestination.findMany({ where: { companyId, isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    site ? prisma.equipment.findMany({ where: { siteId: site.id, category: "VEHICLE", isActive: true }, select: { id: true, equipmentCode: true, name: true } }) : [],
+    site ? prisma.equipment.findMany({ where: { siteId: site.id, category: "VEHICLE", isActive: true }, select: { id: true, equipmentCode: true, name: true, registrationNumber: true } }) : [],
     prisma.millingVehicleProfile.findMany({ where: { companyId } }),
   ]);
   return {
@@ -31,7 +31,7 @@ export const GET = millRoute(null, async ({ companyId }) => {
     destinations,
     vehicles: vehicles.map((vehicle) => {
       const profile = vehicleProfiles.find((row) => row.equipmentId === vehicle.id);
-      return { ...vehicle, registrationNumber: profile?.registrationNumber ?? null, capacityKg: profile?.capacityKg ? Number(profile.capacityKg) : null, driverUserId: profile?.driverUserId ?? null };
+      return { ...vehicle, registrationNumber: profile?.registrationNumber ?? vehicle.registrationNumber ?? null, capacityKg: profile?.capacityKg ? Number(profile.capacityKg) : null, driverUserId: profile?.driverUserId ?? null };
     }),
   };
 });
