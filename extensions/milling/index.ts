@@ -63,11 +63,12 @@ export const milling: CorelithExtension = {
       featureKeys: [],
       verticalProductId: "general-business",
       // ENTERPRISE carries the shop, CRM and portal suites. A mill keeps the
-      // customer list (deliveries and debtors need it) and sells at the gate
-      // through core's fiscalised till (canvas GT): the till, its sales,
-      // shifts and cash-ups, the catalogue and price lists, and the till's
-      // portal. It buys maize through intake, not the shop's buying, and runs
-      // no promotions. The mine's daily capture screens never reach another
+      // customer list (deliveries and debtors need it), the catalogue and
+      // price lists. It sells bags from the dashboard (Gate sales › Sell), at
+      // the office or from a seller's bags, never from core's till on the
+      // `pos.` address, so the till, its shifts and its portal are off. It
+      // buys maize through intake, not the shop's buying, and runs no
+      // promotions. The mine's daily capture screens never reach another
       // vertical.
       disabledFeatureKeys: [
         "ops.shift-report.submit",
@@ -78,6 +79,9 @@ export const milling: CorelithExtension = {
         "reports.plant",
         "retail.purchasing",
         "retail.promotions",
+        "retail.pos",
+        "retail.shifts",
+        "portal.pos",
         "crm.core",
         "crm.leads",
         "crm.clients",
@@ -150,7 +154,6 @@ export const milling: CorelithExtension = {
         ],
       },
       { id: "milling.quality", label: "Quality", icon: "seal-check", href: "/milling/quality" },
-      { id: "milling.sales", label: "Bag sales", icon: "receipt", href: "/milling/sales" },
       {
         id: "milling.despatch",
         label: "Despatch",
@@ -212,8 +215,10 @@ export const milling: CorelithExtension = {
       { into: "stock", id: "milling.lots", label: "Lots and bins", icon: "stockroom", href: "/milling/stock" },
       { into: "stock", id: "milling.lot-movements", label: "Lot movements", icon: "activity", href: "/milling/stock/movements" },
       { into: "stock", id: "milling.lot-counts", label: "Lot counts", icon: "checks", href: "/milling/stock/counts" },
-      // Gate sales (NV02, GT): core's till and its price lists, beside core's sales and cash-ups.
-      { into: "tender", id: "milling.till", label: "Till", icon: "receipt", href: "/milling/gate-till" },
+      // Gate sales: the mill sells from the dashboard, at the office or from a
+      // seller's bags (the Sell sheet), with its own sales list and price lists.
+      { into: "tender", id: "milling.sell", label: "Sell", icon: "till", href: "/milling/sales?sheet=mill-sell" },
+      { into: "tender", id: "milling.sales", label: "Bag sales", icon: "receipt", href: "/milling/sales" },
       { into: "tender", id: "milling.price-lists", label: "Price lists", icon: "price-list", href: "/milling/price-lists" },
       // Customers (NV02): the mill adds visits, surveys and collections beside core's customer list.
       { into: "records", id: "milling.rep", label: "Today's route", icon: "link", href: "/milling/rep" },
@@ -225,7 +230,7 @@ export const milling: CorelithExtension = {
     order: ["ext.milling", "stock", "tender", "records", "books", "assets", "people", "insights"],
     labels: {
       groups: { stock: "Stores", tender: "Gate sales", records: "Customers", assets: "Maintenance", insights: "Reports" },
-      rows: { onhand: "Stock", everyone: "Employees", rosters: "Roster", timeoff: "Leave", shifts: "Cash-up" },
+      rows: { onhand: "Stock", everyone: "Employees", rosters: "Roster", timeoff: "Leave" },
     },
   },
 };
