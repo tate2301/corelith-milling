@@ -58,6 +58,7 @@ import { bundleOnSale, type PricingSnapshot, type SnapshotBundle } from "@/lib/r
 import type { PosReversalQueuePayload, PosSaleQueuePayload } from "@/lib/retail/pos-offline-queue";
 import { getPosPortalHref } from "@/lib/retail/pos-host";
 import { shopFeatures } from "@/lib/retail/shop-profile-rules";
+import { useTillContext } from "./use-till-context";
 import { cashDropDue, cashDropSentence, offlineStopSentence, offlineWindowClosed } from "@/lib/retail/till-on-device";
 import { markPairedTill } from "@/lib/retail/till-presence";
 import { referenceSentence } from "@/lib/retail/till-rule-words";
@@ -81,15 +82,12 @@ import type {
   SaleRefusal,
   SavedSale,
   TillCategory,
-  TillContext,
   TillMessage,
   VoucherSold,
 } from "./types";
 
 type PosQueuedSale = OfflineOutboxOperation<PosSaleQueuePayload>;
 
-/** The till's own context, persisted with the tenant's cache so it is there offline. */
-export const TILL_CONTEXT_KEY = ["till-context"] as const;
 /** The heartbeat: last seen, and the back office's messages. */
 export const TILL_HEARTBEAT_KEY = ["till-heartbeat"] as const;
 const HEARTBEAT_MS = 60_000;
@@ -314,12 +312,7 @@ function useTillStateValue({ isPosHost, paired }: { isPosHost: boolean; paired: 
     return () => markPairedTill(false);
   }, [paired]);
 
-  const contextQuery = useQuery({
-    queryKey: TILL_CONTEXT_KEY,
-    queryFn: async () => (await fetchJson<{ data: TillContext }>("/api/v2/retail/devices/me")).data,
-    staleTime: 60_000,
-    enabled: paired,
-  });
+  const contextQuery = useTillContext(paired);
   const context = contextQuery.data ?? null;
   const rules = context?.rules ?? null;
   const features = context ? shopFeatures(context.shop) : null;
