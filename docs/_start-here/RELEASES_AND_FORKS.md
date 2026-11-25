@@ -133,6 +133,33 @@ registry test fails on a report without a loader or a loader without a report.
 Employee positions are a database enum (`EmployeePosition`), so an extension
 cannot add one; it maps its jobs onto the existing positions.
 
+### A fork's own data about core records
+
+A fork often needs a few facts of its own about a core record: a truck's load
+capacity and driver, a store's bin kind and capacity. Keep them in a fork
+side-table keyed by the core id (`MillingVehicleProfile.equipmentId`,
+`MillingLocationProfile.stockLocationId`), and follow these rules:
+
+1. **Create the row lazily, from the fork's own screens.** The row appears the
+   first time someone saves the fork's details. Core never calls fork code when
+   it saves its own record, so core's routes stay free of fork imports and of
+   per-record hooks.
+2. **Read with a fallback.** Every reader treats the side-table row as
+   optional: no row means the defaults (no capacity, no driver), and the core
+   record still shows, so a record made before the fork existed, or by core,
+   works the same.
+3. **Don't copy core's fields.** Read the name, plate or site from the core
+   record. A copy drifts the moment core's record is edited.
+4. **Scope by the core record.** Find the core record through its site's
+   `companyId` before reading or writing the side row, so a guessed id from
+   another workspace finds nothing.
+
+Ask core for a seam only when the fork must refuse or change a core write
+itself, such as blocking the deactivation of a truck that is out on a trip.
+Even then, propose one general seam, such as before-save checks keyed by
+record type, rather than a seam for one route. A seam for every record the fork
+reacts to would grow without end.
+
 ## Creating a fork
 
 1. Create an empty GitHub repository, for example `tate2301/corelith-milling`.
