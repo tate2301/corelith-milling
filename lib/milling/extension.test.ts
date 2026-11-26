@@ -74,7 +74,7 @@ describe("the milling vertical", () => {
       "Settings",
     ]);
     const production = mill?.items.find((item) => item.label === "Production");
-    expect(production?.kids?.map((kid) => kid.label)).toEqual(["Runs", "Plan", "Shifts", "Packing", "Downtime", "Generator log"]);
+    expect(production?.kids?.map((kid) => kid.label)).toEqual(["Production runs", "Mill batches", "Plan", "Shifts", "Packing", "Downtime", "Generator log"]);
     const despatch = mill?.items.find((item) => item.label === "Despatch");
     expect(despatch?.kids?.map((kid) => kid.label)).toEqual(["Despatches", "Trips", "Routes", "Orders", "Sellers", "Seller trips"]);
 

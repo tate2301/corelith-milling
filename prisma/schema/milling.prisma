@@ -1167,3 +1167,46 @@ model MillingVoucherUse {
 
   @@index([voucherId])
 }
+
+/// One production entry (Grandmeal spec, Stage 1): bags of a product under one batch number and date produced.
+/// The recipe's inputs come off stock, oldest first; the bags land AVAILABLE in the chosen store under the batch.
+model MillingProductionRun {
+  id               String   @id @default(uuid())
+  companyId        String
+  /// PR-YYMMDD-NN.
+  code             String
+  productId        String
+  recipeId         String
+  bags             Int
+  /// The batch number production gives the bags; it is the output lot's code.
+  batchNumber      String
+  producedOn       DateTime @db.Date
+  outputLotId      String
+  stockLocationId  String
+  /// The recipe's maize (or other kilogram input) for these bags, and what was actually used.
+  recipeInputKg    Decimal  @db.Decimal(14, 3)
+  actualInputKg    Decimal  @db.Decimal(14, 3)
+  /// Actual less recipe: used beyond the recipe when positive.
+  yieldVarianceKg  Decimal  @db.Decimal(14, 3)
+  /// What one bag cost: the inputs whose treatment is cost of sales, at their unit cost. Accounting sees it.
+  bagCost          Decimal? @db.Decimal(12, 4)
+  recordedById     String
+  recordedAt       DateTime @default(now())
+
+  @@unique([companyId, code])
+  @@index([companyId, producedOn])
+}
+
+/// Where an item's cost lands in profit and loss. Set by accounting only; an input without one is not used.
+model MillingCostTreatment {
+  id         String   @id @default(uuid())
+  companyId  String
+  productId  String   @unique
+  /// COST_OF_SALES, OPERATING_EXPENSE or ASSET.
+  treatment  String
+  setById    String
+  setAt      DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([companyId])
+}

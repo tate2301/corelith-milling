@@ -59,5 +59,16 @@ service that changes the record; screens only show what the service allows.
 | # | State |
 | --- | --- |
 | A | Done: groups (Accountant, Marketing agent, Security, Outside accountant; a core MANAGER holds no money rights), the order pipeline with its migration, bags or tonnes, the unpaid-balance block on orders and Sell, vouchers |
-| B | In progress |
-| C–G | Not started |
+| B | Done: one-entry production run (scan or pick, bags, batch number, date produced; the recipe's maize, bag and thread come off oldest first; actual maize kept as yield variance; refused below zero naming the input; bags AVAILABLE under the batch; bag cost from cost-of-sales inputs, shown to accounting only); cost treatments set by accounting only, a run refusing an untreated input; fuel's treatment from its machine |
+| C | In progress |
+| D–G | Not started |
+
+## Configuration, not code
+
+Grandmeal's products (Mealie meal 5, 10, 20 and 50 kg, each with a barcode),
+recipes (maize per bag, the bag, thread), stock locations (Factory store,
+Factory shop) and categories are tenant data, set at go-live; no client's
+names live in the code. The mill buys maize through intake and core's
+buying is off in `TEMPLATE_MILLING`, so finished goods are never on a
+purchase order. The shop is General retail, so the customer ID check is
+off.

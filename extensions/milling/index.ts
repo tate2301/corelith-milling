@@ -145,7 +145,8 @@ export const milling: CorelithExtension = {
         icon: "plant",
         href: "/milling/production",
         kids: [
-          { id: "milling.runs", label: "Runs", icon: "plant", href: "/milling/production" },
+          { id: "milling.production-runs", label: "Production runs", icon: "plant", href: "/milling/production/runs" },
+          { id: "milling.runs", label: "Mill batches", icon: "plant", href: "/milling/production" },
           { id: "milling.plan", label: "Plan", icon: "calendar", href: "/milling/plan" },
           { id: "milling.shifts", label: "Shifts", icon: "shift", href: "/milling/shifts" },
           { id: "milling.packing", label: "Packing", icon: "checks", href: "/milling/packing" },
@@ -195,6 +196,7 @@ export const milling: CorelithExtension = {
         kids: [
           { id: "milling.s-lines", label: "Mill lines", icon: "plant", href: "/milling/settings/stages" },
           { id: "milling.s-recipes", label: "Pack recipes", icon: "checks", href: "/milling/settings/recipes" },
+          { id: "milling.s-costs", label: "Cost treatments", icon: "money", href: "/milling/settings/costs" },
           { id: "milling.s-rules", label: "Intake rules", icon: "purchase-order-check", href: "/milling/settings/general" },
           { id: "milling.s-specs", label: "Specs", icon: "seal-check", href: "/milling/settings/qc-specs" },
           { id: "milling.s-bins", label: "Bins and stores", icon: "stockroom", href: "/milling/settings/locations" },

@@ -21,6 +21,8 @@ export async function removeMill(companyId: string) {
   await prisma.millingVoucherUse.deleteMany({ where: { voucher: { companyId } } });
   const tables = [
     "millingVoucher",
+    "millingProductionRun",
+    "millingCostTreatment",
     "millingSale",
     "millingSellerPayment",
     "millingSellerTrip",

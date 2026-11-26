@@ -16,7 +16,7 @@ const PERSONAS: ReadonlyArray<{ group: MillGroupCode; persona: Required<Extensio
   { group: "QUALITY", persona: { home: "/milling/quality", phone: ["milling.quality", "milling.runs", "milling.intake"] } },
   { group: "DISPATCH", persona: { home: "/milling/deliveries", phone: ["milling.deliveries", "milling.trips", "milling.sell", "milling.sellers"] } },
   { group: "STORES", persona: { home: "/milling/intake", phone: ["milling.intake", "onhand", "milling.sales", "milling.lots"] } },
-  { group: "OPERATOR", persona: { home: "/milling/production", phone: ["milling.runs", "milling.downtime"] } },
+  { group: "OPERATOR", persona: { home: "/milling/production/runs", phone: ["milling.production-runs", "milling.runs", "milling.downtime"] } },
   { group: "DRIVER", persona: { home: "/milling/deliveries", phone: ["milling.deliveries"] } },
   { group: "SALES_REP", persona: { home: "/milling/rep", phone: ["milling.rep", "milling.orders", "milling.sales", "milling.collections"] } },
   { group: "ACCOUNTANT", persona: { home: "/milling/orders", phone: ["milling.orders", "money", "milling.collections", "milling.reports"] } },

@@ -37,6 +37,8 @@ export const MILL_CAPABILITIES = [
   "voucher.issue",
   "money.view",
   "audit.read",
+  "cost.set",
+  "production.run",
   "delivery.manage",
   "delivery.own",
   "fuel.record",
@@ -86,7 +88,7 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "SUPERVISOR",
     name: "Production supervisor",
     description: "Allocates staff, opens and closes shifts, runs batches, approves closures and releases machines.",
-    capabilities: ["plan.edit", "shift.manage", "shift.approve", "batch.run", "batch.approve", "machine.release", "stage.record", "fault.report", "fuel.record"],
+    capabilities: ["plan.edit", "shift.manage", "shift.approve", "batch.run", "batch.approve", "machine.release", "stage.record", "fault.report", "fuel.record", "production.run"],
   },
   {
     code: "STORES",
@@ -102,9 +104,9 @@ export const MILL_GROUPS: readonly MillGroup[] = [
   },
   {
     code: "OPERATOR",
-    name: "Production operator",
-    description: "Records stage activity, quantities, faults and downtime.",
-    capabilities: ["stage.record", "fault.report"],
+    name: "Production",
+    description: "Records production runs (bags, batch number, date produced and the maize actually used), stage activity, faults and downtime. Sees no costs or accounts.",
+    capabilities: ["production.run", "stage.record", "fault.report"],
   },
   {
     code: "DISPATCH",
@@ -140,7 +142,7 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "ACCOUNTANT",
     name: "Accountant",
     description: "Every money page: assigns orders to reps and to trips, closes deliveries once the money is in, sets cost treatments, raises credit notes and settles returns and missing bags. Cannot void posted records.",
-    capabilities: ["order.assign", "order.work", "order.close", "money.view", "audit.read", "collection.record"],
+    capabilities: ["order.assign", "order.work", "order.close", "money.view", "audit.read", "cost.set", "collection.record"],
   },
   {
     code: "MARKETING",
@@ -158,7 +160,7 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     code: "AUDITOR",
     name: "Outside accountant",
     description: "The owner's rights over the books: reads every money page and the audit log, and may void under Books' rules.",
-    capabilities: ["order.close", "money.view", "audit.read"],
+    capabilities: ["order.close", "money.view", "audit.read", "cost.set"],
   },
 ];
 
@@ -170,7 +172,7 @@ const FULL_ACCESS_ROLES = new Set(["SUPERADMIN"]);
  * group, but holds these only through the Accountant or Outside accountant
  * group.
  */
-export const MONEY_CAPABILITIES: readonly MillCapability[] = ["order.assign", "order.close", "money.view", "audit.read"];
+export const MONEY_CAPABILITIES: readonly MillCapability[] = ["order.assign", "order.close", "money.view", "audit.read", "cost.set"];
 const MANAGER_ROLES = new Set(["MANAGER"]);
 
 export function isMillGroupCode(value: string): value is MillGroupCode {

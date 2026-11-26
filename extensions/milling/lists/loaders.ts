@@ -19,6 +19,7 @@ import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
 import { loadMillAccess } from "@/lib/milling/access/server";
 import { waitingFor } from "@/lib/milling/reports/home";
 import { MILL_GROUPS } from "@/lib/milling/access/groups";
+import { COST_TREATMENT_WORDS, needsTreatment, type CostTreatment } from "@/lib/milling/books/cost-treatment";
 import { ORDER_STATE_WORDS, orderScope, type OrderState } from "@/lib/milling/distribution/customer-orders";
 import { listMillMembers } from "@/lib/milling/access/membership";
 import { currentOpening, goLiveSteps, openingView } from "@/lib/milling/setup/go-live";
@@ -225,8 +226,70 @@ const packing: ReportLoader = {
   },
 };
 
+/** Production › Production runs (Grandmeal Stage 1). Bag cost is accounting's: empty for anyone else. */
+const productionRuns: ReportLoader = {
+  load: async (ctx) => {
+    const access = await loadMillAccess({ id: ctx.userId, companyId: ctx.companyId, role: ctx.role });
+    const money = access.capabilities.includes("money.view");
+    const rows = await prisma.millingProductionRun.findMany({ where: { companyId: ctx.companyId }, orderBy: { recordedAt: "desc" }, take: 5000 });
+    const [products, names] = await Promise.all([
+      prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.productId) } }, select: { id: true, name: true } }),
+      userNames(ctx.companyId, rows.map((row) => row.recordedById)),
+    ]);
+    return result(
+      rows.map(
+        (row): ReportRow => ({
+          id: row.id,
+          code: row.code,
+          batch: row.batchNumber,
+          product: products.find((product) => product.id === row.productId)?.name ?? null,
+          bags: row.bags,
+          produced: isoDay(row.producedOn),
+          recipeKg: Number(row.recipeInputKg),
+          actualKg: Number(row.actualInputKg),
+          varianceKg: Number(row.yieldVarianceKg),
+          bagCost: money && row.bagCost !== null ? Number(row.bagCost) : null,
+          recordedBy: names.get(row.recordedById) ?? null,
+          recordedAt: row.recordedAt.toISOString(),
+          date: isoDay(row.producedOn),
+        }),
+      ),
+    );
+  },
+  options: async (ctx) => {
+    const rows = await prisma.millingProductionRun.findMany({ where: { companyId: ctx.companyId }, select: { productId: true }, distinct: ["productId"] });
+    const products = await prisma.product.findMany({ where: { id: { in: rows.map((row) => row.productId) } }, select: { name: true } });
+    return { product: distinct(products.map((product) => product.name)) };
+  },
+};
+
+/** Settings › Cost treatments: every item the mill buys or uses, and its treatment. */
+const costTreatments: ReportLoader = {
+  load: async (ctx) => {
+    const access = await loadMillAccess({ id: ctx.userId, companyId: ctx.companyId, role: ctx.role });
+    if (!access.capabilities.includes("money.view")) return result([]);
+    const products = (await prisma.product.findMany({ where: { companyId: ctx.companyId, archivedAt: null }, select: { id: true, name: true, code: true, category: true, unit: true, kind: true }, orderBy: { name: "asc" } })).filter(needsTreatment);
+    const rows = await prisma.millingCostTreatment.findMany({ where: { companyId: ctx.companyId, productId: { in: products.map((product) => product.id) } } });
+    const names = await userNames(ctx.companyId, rows.map((row) => row.setById));
+    return result(
+      products.map((product): ReportRow => {
+        const row = rows.find((entry) => entry.productId === product.id);
+        return {
+          id: product.id,
+          item: product.name,
+          code: product.code,
+          category: product.category,
+          treatment: row ? COST_TREATMENT_WORDS[row.treatment as CostTreatment] : "Not set",
+          set: row ? "Yes" : "No",
+          setBy: row ? (names.get(row.setById) ?? null) : null,
+        };
+      }),
+    );
+  },
+};
+
 const LOT_STATE: Record<string, string> = { HOLD: "On hold", AVAILABLE: "Released", RELEASED: "Released", REJECTED: "Rejected", CONSUMED: "Used" };
-const ORIGIN: Record<string, string> = { BATCH: "Run", INTAKE: "Intake", RETURN: "Return" };
+const ORIGIN: Record<string, string> = { BATCH: "Mill batch", RUN: "Production run", INTAKE: "Intake", RETURN: "Return", OPENING: "Opening stock" };
 
 /** Quality › Tests: lots that pass through QC, with their latest test and anything they wait on. */
 const tests: ReportLoader = {
@@ -1323,6 +1386,8 @@ export const MILLING_LIST_LOADERS: Record<string, ReportLoader> = {
   "milling-opening-lines": openingLines,
   "milling-run-list": runs,
   "milling-packing-list": packing,
+  "milling-production-run-list": productionRuns,
+  "milling-cost-treatment-list": costTreatments,
   "milling-test-list": tests,
   "milling-despatch-list": despatches,
   "milling-route-list": routes,

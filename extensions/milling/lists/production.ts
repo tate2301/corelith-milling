@@ -53,6 +53,47 @@ const runs: ListSpec = {
   },
 };
 
+/**
+ * Production › Production runs (Grandmeal spec, Stage 1): each run's
+ * product, bags, batch number and date produced, the maize against the
+ * recipe, and, for accounting only, what a bag cost.
+ */
+const productionRuns: ListSpec = {
+  noun: "production runs",
+  read: MILL_VIEW,
+  search: { placeholder: "Search runs", keys: ["code", "batch", "product", "recordedBy"] },
+  tabs: [{ key: "all", label: "All", where: [] }],
+  filters: [
+    { key: "date", label: "Produced", type: "period", any: "Any time", column: "date", primary: true, default: "this-week" },
+    { key: "product", label: "Product", type: "choice", any: "Any", primary: true, optionsFromLoader: true, column: "product" },
+  ],
+  sorts: [{ key: "newest", label: "Newest first", rules: [{ column: "recordedAt", dir: "desc" }] }],
+  groups: ["product", "recordedBy"],
+  columns: [
+    { key: "batch", label: "Batch", kind: "code", cell: "ref", width: "150px", align: "start", priority: 1 },
+    { key: "product", label: "Product", kind: "text", cell: "text", width: "minmax(160px,1.2fr)", align: "start", priority: 1 },
+    { key: "bags", label: "Bags", kind: "number", cell: "num", total: "sum", width: "90px", align: "end", priority: 1 },
+    { key: "produced", label: "Produced", kind: "date", cell: "date", dayFormat: "medium", width: "120px", align: "end", priority: 1 },
+    { key: "recipeKg", label: "Recipe kg", kind: "number", cell: "num", total: "sum", width: "110px", align: "end", priority: 2 },
+    { key: "actualKg", label: "Used kg", kind: "number", cell: "num", total: "sum", width: "110px", align: "end", priority: 2 },
+    { key: "varianceKg", label: "Yield variance kg", kind: "number", cell: "num", total: "sum", width: "140px", align: "end", priority: 2 },
+    { key: "bagCost", label: "Cost a bag", kind: "money", cell: "money", currency: "USD", width: "110px", align: "end", priority: 3 },
+    { key: "code", label: "Run", kind: "code", cell: "mono", width: "140px", align: "start", priority: 3 },
+    { key: "recordedBy", label: "Recorded by", kind: "text", cell: "muted", width: "140px", align: "start", priority: 3 },
+    { key: "recordedAt", label: "Recorded", kind: "date", cell: "date", hidden: true, width: "150px", align: "end", priority: 3 },
+  ],
+  rowHref: "/milling/trace?code={batch}",
+  bulk: [{ key: "export" }],
+  primary: { label: "Record a run", icon: "plus", requires: mill("production.run"), sheet: "mill-production-run" },
+  card: { title: "product", badge: "batch", figure: "bags", meta: "{produced} · {recordedBy}" },
+  empty: {
+    icon: "Factory",
+    title: "No production runs yet",
+    line: "A run records the bags made under one batch number and date. The recipe's maize and packaging come off stock, and the bags land in the store at once.",
+    primary: { label: "Record a run", sheet: "mill-production-run", requires: mill("production.run") },
+  },
+};
+
 /** Production › Packing (canvas PK-A1): bags packed from a bulk lot, the check weights and the bulk against the recipe. */
 const packing: ListSpec = {
   noun: "packing runs",
@@ -133,6 +174,7 @@ const def = (key: string, title: string, href: string, list: ListSpec, sort: str
   list,
 });
 
+export const PRODUCTION_RUNS_LIST = def("milling-production-run-list", "Production runs", "/milling/production/runs", productionRuns, "recordedAt", "desc");
 export const RUNS_LIST = def("milling-run-list", "Runs", "/milling/production", runs, "startedAt", "desc");
 export const PACKING_LIST = def("milling-packing-list", "Packing", "/milling/packing", packing, "packedAt", "desc");
 export const TESTS_LIST = def("milling-test-list", "Tests", "/milling/quality", tests, "producedAt", "asc");
