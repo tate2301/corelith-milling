@@ -35,7 +35,6 @@ function spec(resource: SettingsResource): ListSpec {
   const sheet = `mill-setting-${resource.key}`;
   return {
     noun: resource.label.toLowerCase(),
-    sub: resource.description,
     read: MILL_VIEW,
     search: { placeholder: `Search ${resource.label.toLowerCase()}`, keys: ordered.filter((field) => field.type === "text" || field.type === "select").map((field) => field.key) },
     filters: [],

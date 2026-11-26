@@ -59,7 +59,7 @@ export async function invoiceOrder(db: PrismaClient, args: { companyId: string; 
   const order = await db.millingCustomerOrder.findFirst({ where: { id: args.orderId, companyId: args.companyId }, include: { lines: true } });
   if (!order) throw millRefusal("That order is not in this workspace.");
   if (order.invoiceId) throw millRefusal(`${order.code} is already invoiced.`);
-  if (order.status !== "DELIVERED") throw millRefusal("Invoice an order once it is delivered.");
+  if (order.status !== "COMPLETE") throw millRefusal("Invoice an order once it is complete.");
   const [delivered, products] = await Promise.all([
     db.millingDeliveryLine.findMany({ where: { orderId: order.id, delivery: { status: "CLOSED" } } }),
     db.product.findMany({ where: { companyId: args.companyId, id: { in: order.lines.map((line) => line.productId) } }, select: { id: true, name: true, standardPrice: true } }),

@@ -1,14 +1,17 @@
 import { z } from "zod";
 
 import { millRoute, readBody } from "@/lib/milling/api";
-import { createCustomerOrder } from "@/lib/milling/distribution/customer-orders";
+import { logCustomerOrder, orderScope } from "@/lib/milling/distribution/customer-orders";
+import { orderActor } from "@/lib/milling/distribution/order-many";
 import { prisma } from "@/lib/prisma";
 
 /** Customer orders by status, with customer, destination and bag totals. */
-export const GET = millRoute(null, async ({ companyId }, request) => {
+export const GET = millRoute(null, async (context, request) => {
+  const { companyId } = context;
   const status = new URL(request.url).searchParams.get("status");
+  const scope = orderScope(orderActor(context));
   const rows = await prisma.millingCustomerOrder.findMany({
-    where: { companyId, ...(status ? { status } : {}) },
+    where: { companyId, ...scope, ...(status ? { status } : {}) },
     orderBy: { createdAt: "desc" },
     take: 200,
     include: { lines: true },
@@ -17,7 +20,7 @@ export const GET = millRoute(null, async ({ companyId }, request) => {
     prisma.customer.findMany({ where: { companyId, id: { in: rows.map((row) => row.customerId) } }, select: { id: true, name: true } }),
     prisma.millingDestination.findMany({ where: { companyId } }),
     prisma.product.findMany({ where: { companyId, id: { in: rows.flatMap((row) => row.lines.map((line) => line.productId)) } }, select: { id: true, name: true, netWeightKg: true } }),
-    prisma.millingCustomerOrder.groupBy({ by: ["status"], where: { companyId }, _count: { _all: true } }),
+    prisma.millingCustomerOrder.groupBy({ by: ["status"], where: { companyId, ...scope }, _count: { _all: true } }),
   ]);
   return {
     counts: Object.fromEntries(counts.map((row) => [row.status, row._count._all])),
@@ -33,12 +36,19 @@ export const GET = millRoute(null, async ({ companyId }, request) => {
   };
 });
 
-const body = z.object({
-  customerId: z.string().uuid("Choose the customer."),
-  destinationId: z.string().uuid().nullable().optional(),
-  requiredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  notes: z.string().max(2000).nullable().optional(),
-  lines: z.array(z.object({ productId: z.string().uuid(), bags: z.coerce.number().int().positive(), unitPrice: z.coerce.number().min(0).nullable().optional() })).min(1, "Add at least one product."),
-});
+const line = z
+  .object({ productId: z.string().uuid(), bags: z.coerce.number().int().positive().nullable().optional(), tonnes: z.coerce.number().positive().nullable().optional(), unitPrice: z.coerce.number().min(0).nullable().optional() })
+  .refine((value) => (value.bags ?? null) !== null || (value.tonnes ?? null) !== null, "Enter bags or tonnes for each product.");
+const body = z
+  .object({
+    customerId: z.string().uuid().nullable().optional(),
+    newCustomer: z.object({ name: z.string().trim().min(2, "Name the new customer.").max(200), phone: z.string().trim().max(40).nullable().optional() }).nullable().optional(),
+    destinationId: z.string().uuid().nullable().optional(),
+    requiredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+    lines: z.array(line).min(1, "Add at least one product."),
+  })
+  .refine((value) => Boolean(value.customerId) || Boolean(value.newCustomer), "Choose the customer, or add a new one.");
 
-export const POST = millRoute("order.manage", async ({ companyId, userId }, request) => createCustomerOrder(prisma, { companyId, userId, ...(await readBody(request, body)) }));
+/** Marketing logs an order; it lands as Pending, with the agent on it. */
+export const POST = millRoute("order.log", async (context, request) => logCustomerOrder(prisma, { actor: orderActor(context), ...(await readBody(request, body)) }));

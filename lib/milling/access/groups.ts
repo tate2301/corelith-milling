@@ -30,7 +30,15 @@ export const MILL_CAPABILITIES = [
   "qc.decide",
   "stage.record",
   "fault.report",
-  "order.manage",
+  "order.log",
+  "order.assign",
+  "order.work",
+  "order.close",
+  "voucher.issue",
+  "money.view",
+  "audit.read",
+  "cost.set",
+  "production.run",
   "delivery.manage",
   "delivery.own",
   "fuel.record",
@@ -54,6 +62,10 @@ export const MILL_GROUP_CODES = [
   "SALES_REP",
   "DIRECTOR",
   "ADMIN",
+  "ACCOUNTANT",
+  "MARKETING",
+  "SECURITY",
+  "AUDITOR",
 ] as const;
 
 export type MillGroupCode = (typeof MILL_GROUP_CODES)[number];
@@ -69,14 +81,14 @@ export const MILL_GROUPS: readonly MillGroup[] = [
   {
     code: "MANAGEMENT",
     name: "Management",
-    description: "Approves plans, decides on exceptions and significant adjustments, and sees everything.",
-    capabilities: ["plan.edit", "plan.approve", "exception.decide", "stock.adjust.approve", "shift.approve", "batch.approve", "collection.record", "sale.record"],
+    description: "The manager: plans trips, approves plans, decides on exceptions and significant adjustments. Changes no price or money record.",
+    capabilities: ["plan.edit", "plan.approve", "exception.decide", "stock.adjust.approve", "shift.approve", "batch.approve", "delivery.manage", "sale.record"],
   },
   {
     code: "SUPERVISOR",
     name: "Production supervisor",
     description: "Allocates staff, opens and closes shifts, runs batches, approves closures and releases machines.",
-    capabilities: ["plan.edit", "shift.manage", "shift.approve", "batch.run", "batch.approve", "machine.release", "stage.record", "fault.report", "fuel.record"],
+    capabilities: ["plan.edit", "shift.manage", "shift.approve", "batch.run", "batch.approve", "machine.release", "stage.record", "fault.report", "fuel.record", "production.run"],
   },
   {
     code: "STORES",
@@ -92,15 +104,15 @@ export const MILL_GROUPS: readonly MillGroup[] = [
   },
   {
     code: "OPERATOR",
-    name: "Production operator",
-    description: "Records stage activity, quantities, faults and downtime.",
-    capabilities: ["stage.record", "fault.report"],
+    name: "Production",
+    description: "Records production runs (bags, batch number, date produced and the maize actually used), stage activity, faults and downtime. Sees no costs or accounts.",
+    capabilities: ["production.run", "stage.record", "fault.report"],
   },
   {
     code: "DISPATCH",
     name: "Dispatch officer",
-    description: "Takes orders, plans deliveries, checks loading and dispatches.",
-    capabilities: ["order.manage", "delivery.manage", "seller.manage"],
+    description: "Plans deliveries, checks loading and dispatches.",
+    capabilities: ["delivery.manage", "seller.manage"],
   },
   {
     code: "DRIVER",
@@ -111,8 +123,8 @@ export const MILL_GROUPS: readonly MillGroup[] = [
   {
     code: "SALES_REP",
     name: "Sales rep",
-    description: "Works a route: visits shops, records the market survey, chases what they owe and sells bags at the till.",
-    capabilities: ["visit.record", "collection.record", "sale.record"],
+    description: "Works the orders assigned to them and their own trips: moves an order to Ongoing and Complete, sells bags, adds customers, issues one voucher a customer, visits shops and chases what they owe. Sees no cost, margin or accounts.",
+    capabilities: ["order.work", "voucher.issue", "visit.record", "collection.record", "sale.record"],
   },
   {
     code: "DIRECTOR",
@@ -126,10 +138,42 @@ export const MILL_GROUPS: readonly MillGroup[] = [
     description: "Manages who is in which group and the mill's settings.",
     capabilities: ["settings.manage"],
   },
+  {
+    code: "ACCOUNTANT",
+    name: "Accountant",
+    description: "Every money page: assigns orders to reps and to trips, closes deliveries once the money is in, sets cost treatments, raises credit notes and settles returns and missing bags. Cannot void posted records.",
+    capabilities: ["order.assign", "order.work", "order.close", "money.view", "audit.read", "cost.set", "collection.record"],
+  },
+  {
+    code: "MARKETING",
+    name: "Marketing agent",
+    description: "Logs the orders it wins and their customers, and sees how its own orders are going. Changes no order after Pending; sees no accounts.",
+    capabilities: ["order.log"],
+  },
+  {
+    code: "SECURITY",
+    name: "Security",
+    description: "Approves trucks out and back in at the gate. Changes no trip, stock or reading.",
+    capabilities: ["delivery.own"],
+  },
+  {
+    code: "AUDITOR",
+    name: "Outside accountant",
+    description: "The owner's rights over the books: reads every money page and the audit log, and may void under Books' rules.",
+    capabilities: ["order.close", "money.view", "audit.read", "cost.set"],
+  },
 ];
 
-/** Roles that run the workspace: they may do everything at the mill without a group. */
-const FULL_ACCESS_ROLES = new Set(["SUPERADMIN", "MANAGER"]);
+/** The owner: everything at the mill without a group. */
+const FULL_ACCESS_ROLES = new Set(["SUPERADMIN"]);
+/**
+ * Only accounting sees and changes money records (Grandmeal spec,
+ * Permissions). Core's workspace manager runs the rest of the mill without a
+ * group, but holds these only through the Accountant or Outside accountant
+ * group.
+ */
+export const MONEY_CAPABILITIES: readonly MillCapability[] = ["order.assign", "order.close", "money.view", "audit.read", "cost.set"];
+const MANAGER_ROLES = new Set(["MANAGER"]);
 
 export function isMillGroupCode(value: string): value is MillGroupCode {
   return (MILL_GROUP_CODES as readonly string[]).includes(value);
@@ -148,12 +192,12 @@ export function millAccessFor(role: string, groupCodes: readonly string[]): Mill
   if (FULL_ACCESS_ROLES.has(role)) {
     return { canView: true, groups, capabilities: [...MILL_CAPABILITIES] };
   }
-  const held = new Set<MillCapability>();
+  const held = new Set<MillCapability>(MANAGER_ROLES.has(role) ? MILL_CAPABILITIES.filter((capability) => !MONEY_CAPABILITIES.includes(capability)) : []);
   for (const group of MILL_GROUPS) {
     if (groups.includes(group.code)) group.capabilities.forEach((capability) => held.add(capability));
   }
   return {
-    canView: groups.length > 0,
+    canView: groups.length > 0 || MANAGER_ROLES.has(role),
     groups,
     capabilities: MILL_CAPABILITIES.filter((capability) => held.has(capability)),
   };

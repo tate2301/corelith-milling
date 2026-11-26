@@ -6,7 +6,7 @@ import { millRefusal } from "../errors";
 import { assertNotBlocked, raiseException } from "../exceptions/exceptions";
 import { availabilityByCode } from "../maintenance/equipment";
 import { nextDailyCode } from "../records/codes";
-import { createLot, issueFromLot, receiveIntoLot } from "../stock/ledger";
+import { createLot, issueFromLot, receiveIntoLot, releaseReservation, reserve } from "../stock/ledger";
 import { CUSTOMER_ORDER_ENTITY } from "./customer-orders";
 
 /**
@@ -62,15 +62,42 @@ export async function planDelivery(
   });
 }
 
-/** Put a confirmed order on the truck: a line for each lot its bags are reserved from. */
+/** Keep `bags` of a product for an order line, from released lots, oldest batch first by date produced. */
+async function keepOldestFirst(tx: Prisma.TransactionClient, args: { companyId: string; userId: string; orderLineId: string; productId: string; bags: number }) {
+  const balances = await tx.millingLotBalance.findMany({
+    where: { companyId: args.companyId, lot: { productId: args.productId, status: "AVAILABLE" } },
+    include: { lot: { select: { producedAt: true } } },
+  });
+  balances.sort((a, b) => a.lot.producedAt.getTime() - b.lot.producedAt.getTime());
+  const free = balances.reduce((sum, row) => sum.plus(row.quantity).minus(row.reserved), new Prisma.Decimal(0));
+  if (free.lt(args.bags)) {
+    const product = await tx.product.findUniqueOrThrow({ where: { id: args.productId }, select: { name: true } });
+    throw millRefusal(`Only ${free.toString()} bags of ${product.name} are free; the order needs ${args.bags}.`);
+  }
+  let left = new Prisma.Decimal(args.bags);
+  for (const balance of balances) {
+    if (left.lte(0)) break;
+    const take = Prisma.Decimal.min(balance.quantity.minus(balance.reserved), left);
+    if (take.lte(0)) continue;
+    await reserve(tx, { companyId: args.companyId, userId: args.userId, lotId: balance.lotId, stockLocationId: balance.stockLocationId, quantity: take, sourceType: "MillingCustomerOrderLine", sourceId: args.orderLineId });
+    left = left.minus(take);
+  }
+}
+
+/** Put an Ongoing order on the truck: its bags are kept for it now, oldest batch first, a line for each lot. */
 export async function loadOrder(db: PrismaClient, args: { companyId: string; userId: string; deliveryId: string; orderId: string }) {
   return db.$transaction(async (tx) => {
     const delivery = await deliveryOrThrow(tx, args.companyId, args.deliveryId);
     if (!["PLANNED", "LOADING"].includes(delivery.status)) throw millRefusal(`${delivery.code} has left; nothing more goes on it.`);
     const order = await tx.millingCustomerOrder.findFirst({ where: { id: args.orderId, companyId: args.companyId }, include: { lines: true } });
     if (!order) throw millRefusal("That order is not in this workspace.");
-    if (order.status !== "CONFIRMED") throw millRefusal(`${order.code} is ${order.status.toLowerCase().replace(/_/g, " ")}; only a confirmed order is loaded.`);
+    if (order.status !== "ONGOING") throw millRefusal(`${order.code} is ${order.status.toLowerCase()}; only an Ongoing order goes on a trip.`);
+    if (await tx.millingDeliveryLine.findFirst({ where: { orderId: order.id, delivery: { status: { not: "CANCELLED" } } }, select: { id: true } })) {
+      throw millRefusal(`${order.code} is already on a trip.`);
+    }
     for (const line of order.lines) {
+      const kept = await tx.millingReservation.count({ where: { companyId: args.companyId, sourceType: "MillingCustomerOrderLine", sourceId: line.id, status: "ACTIVE" } });
+      if (!kept) await keepOldestFirst(tx, { companyId: args.companyId, userId: args.userId, orderLineId: line.id, productId: line.productId, bags: line.bags });
       const reservations = await tx.millingReservation.findMany({ where: { companyId: args.companyId, sourceType: "MillingCustomerOrderLine", sourceId: line.id, status: "ACTIVE" } });
       for (const reservation of reservations) {
         await tx.millingDeliveryLine.create({
@@ -87,7 +114,6 @@ export async function loadOrder(db: PrismaClient, args: { companyId: string; use
         });
       }
     }
-    await tx.millingCustomerOrder.update({ where: { id: order.id }, data: { status: "IN_DELIVERY" } });
     const lines = await tx.millingDeliveryLine.findMany({ where: { deliveryId: delivery.id } });
     const updated = await tx.millingDelivery.update({ where: { id: delivery.id }, data: { status: "LOADING", loadKg: await loadKgOf(tx, lines) } });
     await audit(tx, args.companyId, args.userId, delivery.id, "order-loaded", { order: order.code });
@@ -95,14 +121,15 @@ export async function loadOrder(db: PrismaClient, args: { companyId: string; use
   });
 }
 
-/** Take an order back off a truck that has not left. Its bags stay reserved for it. */
+/** Take an order back off a truck that has not left. The bags kept for it go back to the store. */
 export async function unloadOrder(db: PrismaClient, args: { companyId: string; userId: string; deliveryId: string; orderId: string }) {
   return db.$transaction(async (tx) => {
     const delivery = await deliveryOrThrow(tx, args.companyId, args.deliveryId);
     if (!["PLANNED", "LOADING"].includes(delivery.status)) throw millRefusal(`${delivery.code} has left.`);
-    const removed = await tx.millingDeliveryLine.deleteMany({ where: { deliveryId: delivery.id, orderId: args.orderId } });
-    if (!removed.count) throw millRefusal("That order is not on this delivery.");
-    await tx.millingCustomerOrder.updateMany({ where: { id: args.orderId, companyId: args.companyId, status: "IN_DELIVERY" }, data: { status: "CONFIRMED" } });
+    const on = await tx.millingDeliveryLine.findMany({ where: { deliveryId: delivery.id, orderId: args.orderId } });
+    if (!on.length) throw millRefusal("That order is not on this delivery.");
+    await tx.millingDeliveryLine.deleteMany({ where: { deliveryId: delivery.id, orderId: args.orderId } });
+    for (const line of on) if (line.reservationId) await releaseReservation(tx, { companyId: args.companyId, reservationId: line.reservationId });
     const lines = await tx.millingDeliveryLine.findMany({ where: { deliveryId: delivery.id } });
     const updated = await tx.millingDelivery.update({ where: { id: delivery.id }, data: { loadKg: await loadKgOf(tx, lines), status: lines.length ? "LOADING" : "PLANNED" } });
     await audit(tx, args.companyId, args.userId, delivery.id, "order-unloaded");
@@ -293,8 +320,8 @@ export async function closeDelivery(db: PrismaClient, args: { companyId: string;
       const delivered = await tx.millingDeliveryLine.findMany({ where: { orderId, delivery: { status: "CLOSED" } } });
       const full = order.lines.every((line) => delivered.filter((row) => row.orderLineId === line.id).reduce((sum, row) => sum + row.bags, 0) >= line.bags);
       if (full) {
-        await tx.millingCustomerOrder.update({ where: { id: orderId }, data: { status: "DELIVERED" } });
-        await writePlatformAuditEvent({ companyId: args.companyId, actorId: args.userId, eventType: "milling.customer-order.delivered", entityType: CUSTOMER_ORDER_ENTITY, entityId: orderId }, tx);
+        await tx.millingCustomerOrder.updateMany({ where: { id: orderId, status: "ONGOING" }, data: { status: "COMPLETE", completedAt: new Date() } });
+        await writePlatformAuditEvent({ companyId: args.companyId, actorId: args.userId, eventType: "milling.customer-order.complete", entityType: CUSTOMER_ORDER_ENTITY, entityId: orderId, payload: { from: "ONGOING", to: "COMPLETE" } }, tx);
       }
     }
     await audit(tx, args.companyId, args.userId, delivery.id, "closed", { odometerIn: args.odometerIn ?? null, fuelLitres: args.fuelLitres ?? null });

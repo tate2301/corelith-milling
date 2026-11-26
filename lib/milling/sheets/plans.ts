@@ -110,62 +110,6 @@ export function decidedWords(result: unknown, verb: string) {
 }
 export const someRefused = (result: unknown) => ((result as Results | null)?.results ?? []).some((row) => !row.ok);
 
-/** Take an order: a customer, where it goes, when it is wanted, and the bags of each product. Saved as a draft. */
-const orderNew: SheetKind = {
-  title: "New order",
-  sub: "Saved as a draft. Confirm it to reserve the bags, oldest first.",
-  wide: true,
-  cur: "US$",
-  load: async () => {
-    const lookups = await fetchJson<MillLookups>("/api/milling/lookups");
-    const products = lookups.products.filter((product) => product.unit === "BAG").slice(0, PRODUCT_SLOTS);
-    return {
-      _customer: lookups.customers.map((row) => ({ id: row.id, label: row.name })),
-      _destination: lookups.destinations.map((row) => ({ id: row.id, label: row.name })),
-      _products: products.map((product) => ({ id: product.id, name: product.name })),
-      ...Object.fromEntries(products.map((product, index) => [`price${index}`, product.standardPrice ? product.standardPrice.toFixed(2) : ""])),
-      customer: "",
-      destination: "Collected",
-    };
-  },
-  sections: [
-    {
-      fields: [
-        { id: "customer", t: "text", l: "Customer", o: (values) => labels(values, "customer"), needed: "Choose the customer." },
-        { id: "destination", t: "text", l: "Deliver to", half: true, o: (values) => ["Collected", ...labels(values, "destination")] },
-        { id: "wanted", t: "date", l: "Wanted by", half: true, opt: true, earliest: "today", clearable: true },
-      ],
-    },
-    {
-      title: "Bags",
-      fields: slotFields("products", PRODUCT_SLOTS, (index, item) => [
-        { id: `bags${index}`, t: "text", l: "", lw: (values) => item(values)?.name ?? "", mono: true, right: true, inputMode: "numeric", opt: true, optQuiet: true, half: true, p: "bags", schema: whole },
-        { id: `price${index}`, t: "money", l: "Price a bag", mono: true, opt: true, optQuiet: true, half: true },
-      ]),
-    },
-  ],
-  note: "Prices are the list price; change one for this order only.",
-  primary: "Save draft",
-  primaryDisabled: (values) => !orderLines(values).length,
-  done: (result) => `${String((result as { code?: string } | null)?.code ?? "Order")} saved`,
-  submit: (values) => ({
-    method: "POST",
-    url: "/api/milling/customer-orders",
-    body: { customerId: idOf(values, "customer"), destinationId: values.destination === "Collected" ? null : idOf(values, "destination"), requiredDate: values.wanted ?? null, lines: orderLines(values) },
-  }),
-  invalidate: [["list"], ["milling"]],
-  requires: [["ext:milling", "order.manage"]],
-};
-
-function orderLines(values: SheetValues) {
-  return slotItems(values, "products").flatMap((product, index) => {
-    const bags = numberOf(values[`bags${index}`]);
-    if (!bags || bags <= 0) return [];
-    const price = numberOf(values[`price${index}`]);
-    return [{ productId: product.id, bags, unitPrice: price && price > 0 ? price : null }];
-  });
-}
-
 /** Plan a shift (DM: shift): its day, kind and start, the supervisor, and the crew with their duties. */
 const shiftNew: SheetKind = {
   title: "Plan a shift",
@@ -233,26 +177,6 @@ function dutyId(values: SheetValues, index: number) {
   const label = values[`duty${index}`];
   return ((values._duty as Choice[] | undefined) ?? []).find((duty) => duty.label === label)?.id ?? null;
 }
-
-/** Cancel orders: their reserved bags go back to stock; the reason is kept with each. */
-const orderCancel: SheetKind = {
-  title: (ctx) => {
-    const count = (ctx.params.get("ids") ?? ctx.id ?? "").split(",").filter(Boolean).length;
-    return count === 1 ? "Cancel the order" : `Cancel ${count} orders`;
-  },
-  sub: "Their reserved bags go back to stock.",
-  cur: "US$",
-  sections: [{ fields: [{ id: "reason", t: "area", l: "Why", rows: 3, needed: "Say why the order is cancelled.", schema: z.string().trim().min(3, "Say why the order is cancelled.").max(2000) }] }],
-  note: "",
-  primary: "Cancel orders",
-  primaryTone: "danger",
-  secondary: "Keep them",
-  done: (result) => decidedWords(result, "cancelled"),
-  doneWarn: (result) => someRefused(result),
-  submit: (values, ctx) => ({ method: "POST", url: "/api/milling/customer-orders/cancel-many", body: { ids: (ctx.params.get("ids") ?? ctx.id ?? "").split(",").filter(Boolean), reason: text(values.reason) } }),
-  invalidate: [["list"], ["milling"]],
-  requires: [["ext:milling", "order.manage"]],
-};
 
 type PlanDetail = { order: { id: string; code: string; status: string }; needs: { maizeKg: number; maizeAvailableKg: number; packaging: Array<{ name: string; needed: number; available: number }>; short: string[] } };
 const kgText = (value: number) => `${value.toLocaleString("en-GB", { maximumFractionDigits: 0 })} kg`;
@@ -405,8 +329,6 @@ const shiftPerson: SheetKind = {
 export const PLAN_SHEETS: Record<string, SheetKind> = {
   "mill-plan-new": planNew,
   "mill-plan-send-back": planSendBack,
-  "mill-order-new": orderNew,
-  "mill-order-cancel": orderCancel,
   "mill-shift-new": shiftNew,
   "mill-plan-approve": planApprove,
   "mill-plan-cancel": planCancel,

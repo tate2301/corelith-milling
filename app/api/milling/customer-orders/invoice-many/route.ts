@@ -1,7 +1,7 @@
 import { millRoute, readBody } from "@/lib/milling/api";
-import { actOnOrders } from "@/lib/milling/distribution/order-many";
+import { actOnOrders, orderActor } from "@/lib/milling/distribution/order-many";
 import { idsBody } from "@/lib/milling/reports/approve-ids";
 import { prisma } from "@/lib/prisma";
 
-/** Invoice the ticked orders from the Orders list, each through its own checks. */
-export const POST = millRoute("order.manage", async ({ companyId, userId }, request) => actOnOrders(prisma, { companyId, userId, action: "invoice", ...(await readBody(request, idsBody)) }));
+/** Invoice the ticked Complete orders in Books: accounting only. */
+export const POST = millRoute("money.view", async (context, request) => actOnOrders(prisma, { actor: orderActor(context), action: "invoice", ...(await readBody(request, idsBody)) }));

@@ -23,7 +23,7 @@ describe("the milling vertical", () => {
     expect(getBundleDefinition("ADDON_MILLING")?.features).toEqual(["milling.home"]);
   });
 
-  it("is provisioned with the mill's modules and the gate till, and none of the school or mine screens", () => {
+  it("is provisioned with the mill's modules, no till on the pos address, and none of the school or mine screens", () => {
     expect(provisioned).toEqual(
       expect.arrayContaining([
         "milling.home",
@@ -35,9 +35,11 @@ describe("the milling vertical", () => {
         "crm.customers",
       ]),
     );
-    // Gate sales run on core's till; the shop's buying and promotions, schools, gold and the mine's capture do not.
-    expect(provisioned).toEqual(expect.arrayContaining(["retail.pos", "retail.catalog", "retail.shifts", "portal.pos"]));
-    const stray = provisioned.filter((key) => /^(schools|gold|portal\.schools)/.test(key) || ["retail.purchasing", "retail.promotions"].includes(key) || key.startsWith("ops."));
+    // The mill sells from the dashboard: it keeps the catalogue, not core's till, its shifts or its portal.
+    expect(provisioned).toEqual(expect.arrayContaining(["retail.catalog"]));
+    const stray = provisioned.filter(
+      (key) => /^(schools|gold|portal\.schools)/.test(key) || ["retail.purchasing", "retail.promotions", "retail.pos", "retail.shifts", "portal.pos"].includes(key) || key.startsWith("ops."),
+    );
     expect(stray).toEqual([]);
   });
 
@@ -66,14 +68,13 @@ describe("the milling vertical", () => {
       "Intake",
       "Production",
       "Quality",
-      "Bag sales",
       "Despatch",
       "Exceptions",
       "Reports",
       "Settings",
     ]);
     const production = mill?.items.find((item) => item.label === "Production");
-    expect(production?.kids?.map((kid) => kid.label)).toEqual(["Runs", "Plan", "Shifts", "Packing", "Downtime", "Generator log"]);
+    expect(production?.kids?.map((kid) => kid.label)).toEqual(["Production runs", "Mill batches", "Plan", "Shifts", "Packing", "Downtime", "Generator log"]);
     const despatch = mill?.items.find((item) => item.label === "Despatch");
     expect(despatch?.kids?.map((kid) => kid.label)).toEqual(["Despatches", "Trips", "Routes", "Orders", "Sellers", "Seller trips"]);
 
@@ -86,6 +87,10 @@ describe("the milling vertical", () => {
     const stores = groups.find((group) => group.label === "Stores");
     expect(stores?.items.map((item) => item.href)).toEqual(expect.arrayContaining(["/milling/stock"]));
     expect(stores?.items.find((item) => item.href === "/retail/stock")?.label).toBe("Stock");
+    // Gate sales is the dashboard's Sell and the mill's sales, not core's till.
+    const gate = groups.find((group) => group.label === "Gate sales");
+    expect(gate?.items.map((item) => item.label)).toEqual(expect.arrayContaining(["Sell", "Bag sales", "Price lists"]));
+    expect(gate?.items.some((item) => item.href.startsWith("/retail/sales") || item.href.startsWith("/retail/shifts"))).toBe(false);
     const maintenance = groups.find((group) => group.label === "Maintenance");
     expect(maintenance?.items.map((item) => item.href)).toEqual(expect.arrayContaining(["/milling/maintenance"]));
   });

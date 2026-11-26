@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { writePlatformAuditEvent } from "@/lib/audit/platform";
 
-import { balancesOf } from "../customers/customers";
+import { assertNothingOwed, assertWithinLimit } from "../customers/credit";
 import { millRefusal } from "../errors";
 import { nextDailyCode } from "../records/codes";
 import { millDay } from "../sellers/trips";
@@ -13,7 +13,8 @@ import { issueFromLot, receiveIntoLot } from "../stock/ledger";
  *
  * - At the office: the bags come off the chosen store's released lots now,
  *   oldest first, for cash, EcoCash or on account to a customer (within their
- *   credit limit). Books gets the sale as an invoice, with a receipt for the
+ *   customer who owes nothing: one with an unpaid balance buys nothing until
+ *   it is cleared). Books gets the sale as an invoice, with a receipt for the
  *   money, when someone with Books rights posts it.
  * - On the road: a seller sells from the bags on their open trip, for cash.
  *   Nothing moves yet; the bags are already out with them. When the trip is
@@ -131,14 +132,9 @@ export async function sellAtOffice(
       gross = gross.plus(product.standardPrice.times(line.bags));
     }
 
-    if (args.payment === "ON_ACCOUNT") {
-      const terms = await tx.millingCustomerTerms.findUnique({ where: { companyId_customerId: { companyId: args.companyId, customerId: customer!.id } } });
-      if (terms?.creditLimit !== null && terms?.creditLimit !== undefined) {
-        const owes = (await balancesOf(tx as unknown as Db, args.companyId, [customer!.id])).get(customer!.id)?.owes ?? 0;
-        const after = D(owes).plus(gross);
-        if (after.gt(terms.creditLimit)) throw millRefusal(`${customer!.name} owes $${owes.toFixed(2)}; with this sale it would be $${after.toFixed(2)}, over their limit of $${D(terms.creditLimit).toFixed(2)}. Take cash or EcoCash.`);
-      }
-    }
+    // Grandmeal spec, Stage 2: a customer who owes anything takes no new sale until it is cleared, whatever they pay with.
+    if (customer) await assertNothingOwed(tx, { companyId: args.companyId, customerId: customer.id, what: "sale" });
+    if (args.payment === "ON_ACCOUNT") await assertWithinLimit(tx, { companyId: args.companyId, customerId: customer!.id, amount: gross });
 
     const code = await nextDailyCode(tx, "millingSale", args.companyId, "SL", args.at);
     const sale = await tx.millingSale.create({

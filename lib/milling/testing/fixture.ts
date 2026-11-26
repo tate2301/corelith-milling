@@ -18,7 +18,11 @@ export async function makeMill(label: string) {
 export async function removeMill(companyId: string) {
   const where = { companyId };
   const siteIds = (await prisma.site.findMany({ where, select: { id: true } })).map((site) => site.id);
+  await prisma.millingVoucherUse.deleteMany({ where: { voucher: { companyId } } });
   const tables = [
+    "millingVoucher",
+    "millingProductionRun",
+    "millingCostTreatment",
     "millingSale",
     "millingSellerPayment",
     "millingSellerTrip",

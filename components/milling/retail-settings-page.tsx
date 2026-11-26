@@ -4,7 +4,6 @@ import type { ComponentType } from "react";
 
 // Reuse the original pages, including their action buttons and live aside slots.
 import PaymentsSettingsPage from "@/app/retail/manage/payments/page";
-import TillRulesSettingsPage from "@/app/retail/manage/till-rules/page";
 import ReceiptsSettingsPage from "@/app/retail/manage/receipts/page";
 import FiscalSettingsPage from "@/app/retail/manage/fiscal/page";
 import PostingSettingsPage from "@/app/retail/manage/posting/page";
@@ -20,7 +19,6 @@ type RetailSection = (typeof RETAIL_SETTINGS_SECTIONS)[number]["key"];
 const PAGES: Record<RetailSection, ComponentType> = {
   company: () => <SettingsFrame page="company" definition={millRetailCompanyPage} />,
   payments: PaymentsSettingsPage,
-  "till-rules": TillRulesSettingsPage,
   receipts: ReceiptsSettingsPage,
   fiscal: FiscalSettingsPage,
   posting: PostingSettingsPage,
