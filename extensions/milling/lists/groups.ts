@@ -10,7 +10,6 @@ import { LIST_BASE, mill } from "./shared";
  */
 const groups: ListSpec = {
   noun: "people",
-  sub: "One person may hold several groups. Owners and managers may do everything at the mill without one.",
   read: mill("settings.manage"),
   search: { placeholder: "Search people", keys: ["name", "email", "groups"] },
   tabs: [

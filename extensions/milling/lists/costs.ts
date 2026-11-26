@@ -10,7 +10,6 @@ import { LIST_BASE, mill } from "./shared";
  */
 const costs: ListSpec = {
   noun: "items",
-  sub: "Where each item's cost lands in profit and loss.",
   read: mill("money.view"),
   search: { placeholder: "Search items", keys: ["item", "code", "category"] },
   tabs: [
