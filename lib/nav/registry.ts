@@ -198,9 +198,21 @@ const CORE_NAV_NODES: readonly NavNode[] = [
       { id: "buy-reqs", label: "Requisitions", icon: "money", href: "/retail/buying/requisitions", badge: "reqs" },
       { id: "buy-suppliers", label: "Suppliers", icon: "dispatch", href: "/retail/buying/suppliers" },
     ] },
-  { id: "equipment", label: "Equipment", icon: "job-card", href: "/maintenance/equipment", group: "assets" },
-  { id: "workorders", label: "Work orders", icon: "stock-take", href: "/maintenance/work-orders", group: "assets" },
-  { id: "breakdown", label: "Breakdowns", icon: "alert-circle", href: "/maintenance/breakdown", group: "assets" },
+  // Assets, shaped as Stock and Books are: the homepage, the register, the
+  // work, the preventive calendar and its plans, the people and the fuel.
+  // Logging a breakdown is a sheet (the homepage's primary), not a row.
+  { id: "assets-home", label: "Overview", icon: "chart-bar", href: "/maintenance", group: "assets" },
+  { id: "equipment", label: "Machinery and vehicles", icon: "plant", href: "/maintenance/equipment", group: "assets" },
+  { id: "workorders", label: "Work orders", icon: "job-card", href: "/maintenance/work-orders", group: "assets" },
+  { id: "pm", label: "Preventive maintenance", icon: "calendar-clock", href: "/maintenance/schedule", group: "assets", kids: [
+      { id: "pm-calendar", label: "Calendar", icon: "calendar", href: "/maintenance/schedule" },
+      { id: "pm-plans", label: "Plans", icon: "checklist", href: "/maintenance/schedule/plans" },
+    ] },
+  { id: "technicians", label: "Technicians", icon: "employee", href: "/maintenance/technicians", group: "assets" },
+  { id: "fuel", label: "Fuel", icon: "plug", href: "/maintenance/fuel", group: "assets", kids: [
+      { id: "fuel-log", label: "Fuel log", icon: "plug", href: "/maintenance/fuel" },
+      { id: "fuel-usage", label: "Usage by machine", icon: "chart-bar", href: "/maintenance/fuel/usage" },
+    ] },
   { id: "money", label: "Money", icon: "money", href: "/books", group: "books" },
   // Books' levels (design/books/spec/books.md, Navigation). A level's rows are the pages it holds;
   // a page the workspace's plan leaves out is not drawn (Model rule 05).
