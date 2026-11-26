@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 import { setMillGroups } from "./access/membership";
 import { billIntake, invoiceOrder } from "./books/bridge";
-import { confirmCustomerOrder, createCustomerOrder } from "./distribution/customer-orders";
+import { ongoingOrder } from "./testing/orders";
 import { closeDelivery, dispatchDelivery, loadOrder, planDelivery, recordProofOfDelivery } from "./distribution/deliveries";
 import { decideIntake, inspectIntake, recordIntake } from "./intake/intake";
 import { followWorkshop, reportDowntime } from "./maintenance/equipment";
@@ -78,9 +78,8 @@ describe("suppliers and Books", () => {
   it("drafts the customer's invoice from what was delivered", async () => {
     await recordOpeningStock(prisma, { ...who(), productId: mill.product("MEAL-10"), stockLocationId: mill.location("FG"), quantity: 300 });
     const customer = await prisma.customer.create({ data: { companyId: mill.companyId, name: "Hatcliffe Store" } });
-    const order = await createCustomerOrder(prisma, { ...who(), customerId: customer.id, lines: [{ productId: mill.product("MEAL-10"), bags: 100, unitPrice: 7 }] });
-    await expect(invoiceOrder(prisma, { ...who(), orderId: order.id })).rejects.toThrow("once it is delivered");
-    await confirmCustomerOrder(prisma, { ...who(), orderId: order.id });
+    const order = await ongoingOrder(prisma, { ...who(), customerId: customer.id, lines: [{ productId: mill.product("MEAL-10"), bags: 100, unitPrice: 7 }] });
+    await expect(invoiceOrder(prisma, { ...who(), orderId: order.id })).rejects.toThrow("once it is complete");
     const truck = await prisma.equipment.findFirstOrThrow({ where: { siteId: mill.siteId, equipmentCode: "HYU-1" } });
     const delivery = await planDelivery(prisma, { ...who(), vehicleId: truck.id });
     await loadOrder(prisma, { ...who(), deliveryId: delivery.id, orderId: order.id });

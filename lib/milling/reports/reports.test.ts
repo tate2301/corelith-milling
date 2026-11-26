@@ -4,7 +4,7 @@ import { MILLING_LOADERS } from "@/extensions/milling/loaders";
 import { MILLING_REPORTS } from "@/extensions/milling/reports";
 import { prisma } from "@/lib/prisma";
 
-import { confirmCustomerOrder, createCustomerOrder } from "../distribution/customer-orders";
+import { ongoingOrder } from "../testing/orders";
 import { closeDelivery, dispatchDelivery, loadOrder, planDelivery, recordProofOfDelivery } from "../distribution/deliveries";
 import { decideIntake, inspectIntake, recordIntake } from "../intake/intake";
 import { completeBatch, issueMaize, recordOutput, recordStage, startBatch } from "../production/batches";
@@ -50,8 +50,7 @@ beforeAll(async () => {
 
   // Sold and delivered.
   const customer = await prisma.customer.create({ data: { companyId: mill.companyId, name: "Nyabira Wholesalers" } });
-  const order = await createCustomerOrder(prisma, { ...who(), customerId: customer.id, lines: [{ productId: mill.product("MEAL-10"), bags: 100, unitPrice: 6.5 }] });
-  await confirmCustomerOrder(prisma, { ...who(), orderId: order.id });
+  const order = await ongoingOrder(prisma, { ...who(), customerId: customer.id, lines: [{ productId: mill.product("MEAL-10"), bags: 100, unitPrice: 6.5 }] });
   const truck = await prisma.equipment.findFirstOrThrow({ where: { siteId: mill.siteId, equipmentCode: "UD-2" } });
   const delivery = await planDelivery(prisma, { ...who(), vehicleId: truck.id, driverId: mill.userId });
   deliveryCode = delivery.code;

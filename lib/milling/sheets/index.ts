@@ -8,6 +8,7 @@ import { TILL_SHEETS } from "./till";
 import { GO_LIVE_SHEETS } from "./go-live";
 import { GROUP_SHEETS } from "./groups";
 import { MACHINE_SHEETS } from "./machines";
+import { ORDER_SHEETS } from "./orders";
 import { PLAN_SHEETS } from "./plans";
 import { PRODUCTION_SHEETS } from "./production";
 import { QC_SHEETS } from "./qc";
@@ -26,6 +27,7 @@ export const MILL_SHEETS: Readonly<Record<string, SheetKind>> = {
   ...PRODUCTION_SHEETS,
   ...DESPATCH_SHEETS,
   ...PLAN_SHEETS,
+  ...ORDER_SHEETS,
   ...CUSTOMER_SHEETS,
   ...MACHINE_SHEETS,
   ...TRIP_SHEETS,

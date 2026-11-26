@@ -7,7 +7,8 @@ import { decideAndApply } from "../exceptions/decide";
 import { recordOpeningStock } from "../stock/counts";
 import { lotsAgainstCore } from "../stock/ledger";
 import { makeMill, removeMill } from "../testing/fixture";
-import { cancelCustomerOrder, confirmCustomerOrder, createCustomerOrder } from "./customer-orders";
+import { ongoingOrder, ownerActor } from "../testing/orders";
+import { cancelCustomerOrder } from "./customer-orders";
 import { closeDelivery, dispatchDelivery, loadOrder, planDelivery, recordProofOfDelivery, unloadOrder } from "./deliveries";
 import { matchGateSales } from "./gate-sales";
 
@@ -34,20 +35,23 @@ const free = async (code: string) => {
 };
 
 describe("orders and deliveries", () => {
-  it("reserves the oldest bags first, and refuses an order that cannot be met", async () => {
-    const big = await createCustomerOrder(prisma, { ...who(), customerId, lines: [{ productId: mill.product("MEAL-10"), bags: 5000 }] });
-    await expect(confirmCustomerOrder(prisma, { ...who(), orderId: big.id })).rejects.toThrow("Only 1600 bags");
-    await cancelCustomerOrder(prisma, { ...who(), orderId: big.id, reason: "Too big" });
+  it("keeps the oldest bags first when an order is loaded, gives them back when it comes off, and refuses an order that cannot be met", async () => {
+    const trip = await planDelivery(prisma, { ...who(), vehicleId: truckId });
+    const big = await ongoingOrder(prisma, { ...who(), customerId, lines: [{ productId: mill.product("MEAL-10"), bags: 5000 }] });
+    await expect(loadOrder(prisma, { ...who(), deliveryId: trip.id, orderId: big.id })).rejects.toThrow("Only 1600 bags");
+    await cancelCustomerOrder(prisma, { actor: ownerActor(who()), orderId: big.id, reason: "Too big" });
 
-    const order = await createCustomerOrder(prisma, { ...who(), customerId, lines: [{ productId: mill.product("MEAL-10"), bags: 1200 }] });
-    await confirmCustomerOrder(prisma, { ...who(), orderId: order.id });
+    const order = await ongoingOrder(prisma, { ...who(), customerId, lines: [{ productId: mill.product("MEAL-10"), bags: 1200 }] });
+    await loadOrder(prisma, { ...who(), deliveryId: trip.id, orderId: order.id });
     expect([await free("FG-OLD"), await free("FG-NEW")]).toEqual([0, 400]);
+    await expect(loadOrder(prisma, { ...who(), deliveryId: trip.id, orderId: order.id })).rejects.toThrow("already on a trip");
+    await unloadOrder(prisma, { ...who(), deliveryId: trip.id, orderId: order.id });
+    expect([await free("FG-OLD"), await free("FG-NEW")]).toEqual([1000, 600]);
   });
 
   it("refuses an overloaded truck, dispatches once lightened, and reconciles a short delivery with a return", async () => {
-    const heavy = await createCustomerOrder(prisma, { ...who(), customerId, lines: [{ productId: mill.product("MEAL-10"), bags: 300 }] });
-    await confirmCustomerOrder(prisma, { ...who(), orderId: heavy.id });
-    const first = await prisma.millingCustomerOrder.findFirstOrThrow({ where: { companyId: mill.companyId, status: "CONFIRMED", id: { not: heavy.id } } });
+    const heavy = await ongoingOrder(prisma, { ...who(), customerId, lines: [{ productId: mill.product("MEAL-10"), bags: 300 }] });
+    const first = await prisma.millingCustomerOrder.findFirstOrThrow({ where: { companyId: mill.companyId, status: "ONGOING", id: { not: heavy.id } } });
 
     const delivery = await planDelivery(prisma, { ...who(), vehicleId: truckId, driverId: mill.userId });
     await loadOrder(prisma, { ...who(), deliveryId: delivery.id, orderId: first.id });
@@ -56,12 +60,13 @@ describe("orders and deliveries", () => {
     await expect(dispatchDelivery(prisma, { ...who(), deliveryId: delivery.id })).rejects.toThrow("over the truck's capacity");
     expect(await prisma.millingException.count({ where: { targetId: delivery.id, type: "OVER_CAPACITY", status: "OPEN" } })).toBe(1);
 
-    // Take the big order off; put the 300 bags on: 3000 kg.
+    // Take the big order off (its bags go back); the 300 bags stay on: 3000 kg.
     await unloadOrder(prisma, { ...who(), deliveryId: delivery.id, orderId: first.id });
+    expect(await free("FG-OLD")).toBe(1000);
     const dispatched = await dispatchDelivery(prisma, { ...who(), deliveryId: delivery.id, odometerOut: 15200 });
     expect(dispatched.status).toBe("DISPATCHED");
     expect(await prisma.millingException.count({ where: { targetId: delivery.id, status: "OPEN" } })).toBe(0);
-    expect(await free("FG-NEW")).toBe(100);
+    expect(await free("FG-NEW")).toBe(300);
 
     const lines = await prisma.millingDeliveryLine.findMany({ where: { deliveryId: delivery.id } });
     const stranger = await prisma.user.create({ data: { name: "Other driver", email: `other-${Date.now()}@x.test`, role: "OPERATOR", companyId: mill.companyId } });
@@ -88,7 +93,7 @@ describe("orders and deliveries", () => {
     await expect(closeDelivery(prisma, { ...who(), deliveryId: delivery.id, odometerIn: 15000 })).rejects.toThrow("below the reading out");
     const closed = await closeDelivery(prisma, { ...who(), deliveryId: delivery.id, odometerIn: 15342, fuelLitres: 61 });
     expect(closed.status).toBe("CLOSED");
-    expect((await prisma.millingCustomerOrder.findUniqueOrThrow({ where: { id: heavy.id } })).status).toBe("DELIVERED");
+    expect((await prisma.millingCustomerOrder.findUniqueOrThrow({ where: { id: heavy.id } })).status).toBe("COMPLETE");
   });
 });
 

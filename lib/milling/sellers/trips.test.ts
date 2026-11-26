@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/prisma";
 
-import { confirmCustomerOrder, createCustomerOrder } from "../distribution/customer-orders";
+import { loadOrder, planDelivery } from "../distribution/deliveries";
+import { ongoingOrder } from "../testing/orders";
 import { recordOpeningStock } from "../stock/counts";
 import { lotsAgainstCore } from "../stock/ledger";
 import { makeEmployee, makeMill, removeMill } from "../testing/fixture";
@@ -107,8 +108,10 @@ describe("a seller's day", () => {
 
     // Nothing else can take bags that are out with a seller.
     const customer = await prisma.customer.create({ data: { companyId: mill.companyId, name: "Shop" } });
-    const order = await createCustomerOrder(prisma, { ...who(), customerId: customer.id, lines: [{ productId: MEAL(), bags: 60 }] });
-    await expect(confirmCustomerOrder(prisma, { ...who(), orderId: order.id })).rejects.toThrow("Only 50 bags");
+    const order = await ongoingOrder(prisma, { ...who(), customerId: customer.id, lines: [{ productId: MEAL(), bags: 60 }] });
+    const truck = await prisma.equipment.findFirstOrThrow({ where: { siteId: mill.siteId, category: "VEHICLE" } });
+    const delivery = await planDelivery(prisma, { ...who(), vehicleId: truck.id });
+    await expect(loadOrder(prisma, { ...who(), deliveryId: delivery.id, orderId: order.id })).rejects.toThrow("Only 50 bags");
   });
 
   it("allows one trip a day, and never your own", async () => {

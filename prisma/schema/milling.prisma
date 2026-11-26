@@ -714,8 +714,22 @@ model MillingCustomerOrder {
   customerId    String
   destinationId String?
   requiredDate  DateTime? @db.Date
-  /// DRAFT, CONFIRMED, IN_DELIVERY, DELIVERED, CLOSED or CANCELLED.
-  status        String    @default("DRAFT")
+  /// PENDING (logged), ONGOING (confirmed, scheduled or on a truck), COMPLETE
+  /// (bags handed over), CLOSED (money confirmed by accounting) or CANCELLED.
+  status        String    @default("PENDING")
+  /// The marketing agent (core User) who logged it; stays on it through dispatch and reports.
+  marketingAgentId String?
+  /// The sales rep (core User) the accountant assigned it to.
+  salesRepId    String?
+  assignedById  String?
+  assignedAt    DateTime?
+  ongoingAt     DateTime?
+  completedAt   DateTime?
+  closedAt      DateTime?
+  closedById    String?
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelReason  String?
   /// The core SalesInvoice (Books) drafted from what was delivered.
   invoiceId     String?
   notes         String?
@@ -727,6 +741,8 @@ model MillingCustomerOrder {
 
   @@unique([companyId, code])
   @@index([companyId, status])
+  @@index([salesRepId, status])
+  @@index([marketingAgentId])
 }
 
 model MillingCustomerOrderLine {
@@ -735,7 +751,12 @@ model MillingCustomerOrderLine {
   /// A packed core Product (unit BAG).
   productId String
   bags      Int
+  /// The tonnes the line was ordered in, when it was (1 t = 1000 / net kg bags).
+  enteredTonnes Decimal? @db.Decimal(10, 3)
   unitPrice Decimal? @db.Decimal(12, 2)
+  /// The customer's voucher applied to this line, and what it takes off the line.
+  voucherId String?
+  discount  Decimal  @default(0) @db.Decimal(12, 2)
 
   order MillingCustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -1104,4 +1125,45 @@ model MillingSaleLine {
   sale MillingSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
+}
+
+/// A discount voucher for one customer: a percentage off, an amount off a bag, or a fixed amount.
+/// One live voucher a customer; it applies to an order or sale line, never to a total afterwards.
+model MillingVoucher {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// VC-YYMMDD-NN.
+  code        String
+  customerId  String
+  /// PERCENT, PER_BAG or FIXED.
+  kind        String
+  value       Decimal  @db.Decimal(12, 2)
+  expiresOn   DateTime @db.Date
+  useLimit    Int      @default(1)
+  uses        Int      @default(0)
+  /// ACTIVE until it is used up or VOID; an ACTIVE voucher past its date is expired.
+  status      String   @default("ACTIVE")
+  issuedById  String
+  issuedAt    DateTime @default(now())
+
+  usesMade MillingVoucherUse[]
+
+  @@unique([companyId, code])
+  @@index([companyId, customerId, status])
+}
+
+/// One use of a voucher on a line, and what it took off.
+model MillingVoucherUse {
+  id          String   @id @default(uuid())
+  voucherId   String
+  /// The order line or till sale line it was applied to.
+  orderLineId String?
+  saleLineId  String?
+  amount      Decimal  @db.Decimal(12, 2)
+  usedById    String
+  usedAt      DateTime @default(now())
+
+  voucher MillingVoucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+
+  @@index([voucherId])
 }

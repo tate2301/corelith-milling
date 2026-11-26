@@ -45,12 +45,15 @@ describe("selling at the office", () => {
     await expect(sellAtOffice(prisma, { ...who(), stockLocationId: mill.location("FG"), payment: "CASH", lines: [{ productId: MEAL(), bags: 500 }] })).rejects.toThrow("free in");
   });
 
-  it("puts a sale on account only to a customer within their limit", async () => {
+  it("puts a sale on account only to a customer who owes nothing, within their limit", async () => {
     await expect(sellAtOffice(prisma, { ...who(), stockLocationId: mill.location("FG"), payment: "ON_ACCOUNT", lines: [{ productId: MEAL(), bags: 1 }] })).rejects.toThrow("Choose the customer");
     await prisma.millingCustomerTerms.create({ data: { companyId: mill.companyId, customerId, creditLimit: 10 } });
     await expect(sellAtOffice(prisma, { ...who(), stockLocationId: mill.location("FG"), payment: "ON_ACCOUNT", customerId, lines: [{ productId: MEAL(), bags: 2 }] })).rejects.toThrow("over their limit");
     const sale = await sellAtOffice(prisma, { ...who(), stockLocationId: mill.location("FG"), payment: "ON_ACCOUNT", customerId, lines: [{ productId: MEAL(), bags: 1 }] });
     expect(sale.customerName).toBe("Mazowe Spar");
+    // They owe that sale until it is paid: no new sale, cash or not.
+    await expect(sellAtOffice(prisma, { ...who(), stockLocationId: mill.location("FG"), payment: "CASH", customerId, lines: [{ productId: MEAL(), bags: 1 }] })).rejects.toThrow("still owes");
+    await prisma.millingSale.update({ where: { id: sale.id }, data: { status: "VOIDED" } });
   });
 
   it("gives no discount at the office", async () => {

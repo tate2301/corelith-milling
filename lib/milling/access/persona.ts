@@ -18,7 +18,11 @@ const PERSONAS: ReadonlyArray<{ group: MillGroupCode; persona: Required<Extensio
   { group: "STORES", persona: { home: "/milling/intake", phone: ["milling.intake", "onhand", "milling.sales", "milling.lots"] } },
   { group: "OPERATOR", persona: { home: "/milling/production", phone: ["milling.runs", "milling.downtime"] } },
   { group: "DRIVER", persona: { home: "/milling/deliveries", phone: ["milling.deliveries"] } },
-  { group: "SALES_REP", persona: { home: "/milling/rep", phone: ["milling.rep", "milling.sales", "milling.visits", "milling.collections"] } },
+  { group: "SALES_REP", persona: { home: "/milling/rep", phone: ["milling.rep", "milling.orders", "milling.sales", "milling.collections"] } },
+  { group: "ACCOUNTANT", persona: { home: "/milling/orders", phone: ["milling.orders", "money", "milling.collections", "milling.reports"] } },
+  { group: "MARKETING", persona: { home: "/milling/orders", phone: ["milling.orders", "milling.collections"] } },
+  { group: "SECURITY", persona: { home: "/milling/deliveries", phone: ["milling.deliveries"] } },
+  { group: "AUDITOR", persona: { home: "/books", phone: ["money", "milling.reports"] } },
   { group: "DIRECTOR", persona: { home: "/milling/director", phone: ["milling.director", "milling.reports"] } },
   { group: "ADMIN", persona: { home: "/milling/settings/general", phone: ["milling.home", "milling.settings"] } },
 ];

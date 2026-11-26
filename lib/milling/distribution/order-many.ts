@@ -1,28 +1,37 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { isRefusal } from "../api";
+import type { MillContext } from "../access/server";
 import { invoiceOrder } from "../books/bridge";
 import { millRefusal } from "../errors";
 
-import { cancelCustomerOrder, confirmCustomerOrder } from "./customer-orders";
+import { assignOrderRep, cancelCustomerOrder, markOrderOngoing, type OrderActor } from "./customer-orders";
 
-export type OrderAction = "confirm" | "invoice" | "cancel";
+export type OrderAction = "ongoing" | "assign" | "invoice" | "cancel";
+
+/** The person acting on an order, from a mill route's context. */
+export function orderActor(context: Pick<MillContext, "companyId" | "userId" | "session" | "access">): OrderActor {
+  return { companyId: context.companyId, userId: context.userId, role: String(context.session.user.role ?? ""), groups: context.access.groups };
+}
 
 /**
  * One press over the ticked orders on the Orders list: each through its own
  * service and checks, one at a time. One refused does not stop the others;
  * the press is refused only when none went.
  */
-export async function actOnOrders(db: PrismaClient, args: { companyId: string; userId: string; action: OrderAction; ids: string[]; reason?: string }) {
+export async function actOnOrders(db: PrismaClient, args: { actor: OrderActor; action: OrderAction; ids: string[]; reason?: string; salesRepId?: string }) {
+  const { actor } = args;
   const results: Array<{ id: string; ok: boolean; message: string }> = [];
   for (const id of args.ids) {
     try {
       const order =
-        args.action === "confirm"
-          ? await confirmCustomerOrder(db, { companyId: args.companyId, userId: args.userId, orderId: id })
-          : args.action === "invoice"
-            ? await invoiceOrder(db, { companyId: args.companyId, userId: args.userId, orderId: id })
-            : await cancelCustomerOrder(db, { companyId: args.companyId, userId: args.userId, orderId: id, reason: args.reason ?? "" });
+        args.action === "ongoing"
+          ? await markOrderOngoing(db, { actor, orderId: id })
+          : args.action === "assign"
+            ? await assignOrderRep(db, { actor, orderId: id, salesRepId: args.salesRepId ?? "" })
+            : args.action === "invoice"
+              ? await invoiceOrder(db, { companyId: actor.companyId, userId: actor.userId, orderId: id })
+              : await cancelCustomerOrder(db, { actor, orderId: id, reason: args.reason ?? "" });
       results.push({ id, ok: true, message: String((order as { code?: string } | null)?.code ?? "Done") });
     } catch (error) {
       if (!isRefusal(error)) throw error;

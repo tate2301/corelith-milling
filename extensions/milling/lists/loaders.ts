@@ -19,6 +19,7 @@ import { DECISION_LABEL } from "@/lib/milling/exceptions/words";
 import { loadMillAccess } from "@/lib/milling/access/server";
 import { waitingFor } from "@/lib/milling/reports/home";
 import { MILL_GROUPS } from "@/lib/milling/access/groups";
+import { ORDER_STATE_WORDS, orderScope, type OrderState } from "@/lib/milling/distribution/customer-orders";
 import { listMillMembers } from "@/lib/milling/access/membership";
 import { currentOpening, goLiveSteps, openingView } from "@/lib/milling/setup/go-live";
 
@@ -328,18 +329,21 @@ const routes: ReportLoader = {
   },
 };
 
-const ORDER_STATE: Record<string, string> = { DRAFT: "Draft", CONFIRMED: "Confirmed", IN_DELIVERY: "On a truck", DELIVERED: "Delivered", CLOSED: "Closed", CANCELLED: "Cancelled" };
-
-/** Despatch › Orders: what customers ordered. */
+/** Despatch › Orders: what customers ordered, who logged it, the rep on it, and how far it has gone. A rep sees theirs; marketing what it logged. */
 const orders: ReportLoader = {
   load: async (ctx) => {
-    const rows = await prisma.millingCustomerOrder.findMany({ where: { companyId: ctx.companyId }, orderBy: { createdAt: "desc" }, take: 5000, include: { lines: true } });
-    const [customers, destinations, products] = await Promise.all([
+    const access = await loadMillAccess({ id: ctx.userId, companyId: ctx.companyId, role: ctx.role });
+    const scope = orderScope({ companyId: ctx.companyId, userId: ctx.userId, role: String(ctx.role ?? ""), groups: access.groups });
+    const rows = await prisma.millingCustomerOrder.findMany({ where: { companyId: ctx.companyId, ...scope }, orderBy: { createdAt: "desc" }, take: 5000, include: { lines: true } });
+    const people = [...new Set(rows.flatMap((row) => [row.salesRepId, row.marketingAgentId]).filter((id): id is string => Boolean(id)))];
+    const [customers, destinations, products, users] = await Promise.all([
       prisma.customer.findMany({ where: { companyId: ctx.companyId, id: { in: rows.map((row) => row.customerId) } }, select: { id: true, name: true } }),
       prisma.millingDestination.findMany({ where: { companyId: ctx.companyId }, select: { id: true, name: true } }),
       prisma.product.findMany({ where: { companyId: ctx.companyId, id: { in: rows.flatMap((row) => row.lines.map((line) => line.productId)) } }, select: { id: true, name: true, netWeightKg: true } }),
+      prisma.user.findMany({ where: { companyId: ctx.companyId, id: { in: people } }, select: { id: true, name: true } }),
     ]);
     const product = (id: string) => products.find((entry) => entry.id === id);
+    const person = (id: string | null) => (id ? (users.find((user) => user.id === id)?.name ?? null) : null);
     return result(
       rows.map(
         (row): ReportRow => ({
@@ -350,9 +354,13 @@ const orders: ReportLoader = {
           destination: destinations.find((entry) => entry.id === row.destinationId)?.name ?? "Collected",
           products: row.lines.map((line) => `${line.bags} × ${product(line.productId)?.name ?? ""}`).join(", "),
           stateKey: row.status,
-          state: ORDER_STATE[row.status] ?? row.status,
+          state: ORDER_STATE_WORDS[row.status as OrderState] ?? row.status,
+          agent: person(row.marketingAgentId),
+          rep: person(row.salesRepId) ?? "Not assigned",
+          assigned: row.salesRepId ? "Yes" : "No",
           bags: row.lines.reduce((sum, line) => sum + line.bags, 0),
           kg: row.lines.reduce((sum, line) => sum + line.bags * Number(product(line.productId)?.netWeightKg ?? 0), 0),
+          discount: row.lines.reduce((sum, line) => sum + Number(line.discount), 0),
           invoiced: row.invoiceId ? "Yes" : "No",
           needed: row.requiredDate ? isoDay(row.requiredDate) : null,
           createdAt: row.createdAt.toISOString(),

@@ -88,14 +88,21 @@ const routes: ListSpec = {
   },
 };
 
-/** Despatch › Orders: what customers ordered, the bags and kilograms, and how far each has gone. */
+/**
+ * Despatch › Orders (Grandmeal spec, Stage 2): Pending → Ongoing → Complete
+ * → Closed, or Cancelled. Marketing logs; the accountant assigns a rep; the
+ * rep moves an order to Ongoing, applies the customer's voucher and cancels;
+ * accounting closes. A rep sees their orders; marketing what it logged.
+ */
 const orders: ListSpec = {
   noun: "orders",
   read: MILL_VIEW,
-  search: { placeholder: "Search orders", keys: ["code", "customer", "destination", "products"] },
+  search: { placeholder: "Search orders", keys: ["code", "customer", "destination", "products", "rep", "agent"] },
   tabs: [
-    { key: "open", label: "Open", where: [{ column: "stateKey", op: "is", value: ["DRAFT", "CONFIRMED", "IN_DELIVERY"] }], empty: "No order is waiting." },
-    { key: "delivered", label: "Delivered", where: [{ column: "stateKey", op: "is", value: ["DELIVERED", "CLOSED"] }] },
+    { key: "pending", label: "Pending", where: [{ column: "stateKey", op: "is", value: ["PENDING"] }], empty: "No order is waiting to be worked." },
+    { key: "ongoing", label: "Ongoing", where: [{ column: "stateKey", op: "is", value: ["ONGOING"] }], empty: "No order is being scheduled or on a truck." },
+    { key: "complete", label: "Complete", where: [{ column: "stateKey", op: "is", value: ["COMPLETE"] }], empty: "No order is waiting for accounting to close it." },
+    { key: "closed", label: "Closed", where: [{ column: "stateKey", op: "is", value: ["CLOSED", "CANCELLED"] }] },
     { key: "all", label: "All", where: [] },
   ],
   filters: [
@@ -103,36 +110,41 @@ const orders: ListSpec = {
     { key: "customer", label: "Customer", type: "choice", any: "Any", primary: true, optionsFromLoader: true, column: "customer" },
   ],
   sorts: [{ key: "newest", label: "Newest first", rules: [{ column: "createdAt", dir: "desc" }] }],
-  groups: ["customer", "state", "destination"],
+  groups: ["customer", "state", "rep", "agent", "destination"],
   columns: [
     { key: "code", label: "Order", kind: "code", cell: "ref", width: "140px", align: "start", priority: 1 },
     { key: "customer", label: "Customer", kind: "text", cell: "text", width: "minmax(180px,1.4fr)", align: "start", priority: 1 },
     { key: "products", label: "Products", kind: "text", cell: "muted", width: "minmax(160px,1.2fr)", align: "start", priority: 3 },
-    { key: "state", label: "State", kind: "status", cell: "state", tones: { Draft: "hollow", Confirmed: "info", "On a truck": "info", Delivered: "ok", Closed: "ok", Cancelled: "hollow" }, width: "120px", align: "start", priority: 1 },
+    { key: "state", label: "State", kind: "status", cell: "state", tones: { Pending: "hollow", Ongoing: "info", Complete: "warn", Closed: "ok", Cancelled: "hollow" }, width: "120px", align: "start", priority: 1 },
+    { key: "rep", label: "Sales rep", kind: "text", cell: "text", width: "140px", align: "start", priority: 2 },
+    { key: "agent", label: "Logged by", kind: "text", cell: "muted", width: "140px", align: "start", priority: 3 },
     { key: "bags", label: "Bags", kind: "number", cell: "num", total: "sum", width: "80px", align: "end", priority: 1 },
-    { key: "kg", label: "Kg", kind: "number", cell: "num", total: "sum", width: "100px", align: "end", priority: 2 },
-    { key: "createdAt", label: "Taken", kind: "date", cell: "date", hidden: true, width: "150px", align: "end", priority: 3 },
-    { key: "invoiced", label: "Invoiced", kind: "status", cell: "dot", tones: { Yes: "ok", No: "hollow" }, width: "100px", align: "start", priority: 3 },
+    { key: "kg", label: "Kg", kind: "number", cell: "num", total: "sum", width: "100px", align: "end", priority: 3 },
+    { key: "createdAt", label: "Logged", kind: "date", cell: "date", hidden: true, width: "150px", align: "end", priority: 3 },
     { key: "needed", label: "Needed", kind: "date", cell: "date", dayFormat: "medium", width: "120px", align: "end", priority: 2 },
   ],
   rowHref: "/milling/collections/{customerId}",
   rowMenu: [
-    { key: "confirm", label: "Confirm", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT"] }], do: { confirm: { title: "Confirm the order?", body: "Its bags are reserved, oldest lots first, ready for a despatch note.", confirm: "Confirm" }, endpoint: "/api/milling/customer-orders/confirm-many" } },
-    { key: "invoice", label: "Invoice in Books", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DELIVERED"] }, { column: "invoiced", op: "is", value: ["No"] }], do: { confirm: { title: "Invoice what was delivered?", body: "A draft invoice for the delivered bags goes to Books, to issue there.", confirm: "Invoice" }, endpoint: "/api/milling/customer-orders/invoice-many" } },
-    { key: "cancel", label: "Cancel", tone: "bad", separated: true, requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT", "CONFIRMED"] }], do: { sheet: "mill-order-cancel" } },
+    { key: "assign", label: "Assign a sales rep", requires: mill("order.assign"), when: [{ column: "stateKey", op: "is", value: ["PENDING", "ONGOING"] }], do: { sheet: "mill-order-assign" } },
+    { key: "ongoing", label: "Customer confirmed", requires: mill("order.work"), when: [{ column: "stateKey", op: "is", value: ["PENDING"] }, { column: "assigned", op: "is", value: ["Yes"] }], do: { confirm: { title: "Has the customer confirmed?", body: "The order moves to Ongoing, ready to be put on a trip.", confirm: "Mark Ongoing" }, endpoint: "/api/milling/customer-orders/ongoing-many" } },
+    { key: "voucher-new", label: "Issue the customer a voucher", requires: mill("voucher.issue"), when: [{ column: "stateKey", op: "is", value: ["PENDING", "ONGOING"] }], do: { sheet: "mill-voucher-new" } },
+    { key: "voucher", label: "Apply voucher", requires: mill("order.work"), when: [{ column: "stateKey", op: "is", value: ["PENDING", "ONGOING"] }], do: { sheet: "mill-order-voucher" } },
+    { key: "invoice", label: "Invoice in Books", requires: mill("money.view"), when: [{ column: "stateKey", op: "is", value: ["COMPLETE"] }, { column: "invoiced", op: "is", value: ["No"] }], do: { confirm: { title: "Invoice what was delivered?", body: "A draft invoice for the delivered bags goes to Books, to issue there.", confirm: "Invoice" }, endpoint: "/api/milling/customer-orders/invoice-many" } },
+    { key: "cancel", label: "Cancel", tone: "bad", separated: true, requires: mill("order.work"), when: [{ column: "stateKey", op: "is", value: ["PENDING", "ONGOING"] }], do: { sheet: "mill-order-cancel" } },
   ],
   bulk: [
-    { key: "confirm", label: "Confirm", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT"] }], do: { confirm: { title: "Confirm these orders?", body: "Each reserves its bags, oldest lots first. One without the bags in stock stays a draft.", confirm: "Confirm" }, endpoint: "/api/milling/customer-orders/confirm-many" } },
-    { key: "cancel", label: "Cancel", tone: "bad", requires: mill("order.manage"), when: [{ column: "stateKey", op: "is", value: ["DRAFT", "CONFIRMED"] }], do: { sheet: "mill-order-cancel" } },
+    { key: "assign", label: "Assign a sales rep", requires: mill("order.assign"), when: [{ column: "stateKey", op: "is", value: ["PENDING", "ONGOING"] }], do: { sheet: "mill-order-assign" } },
+    { key: "ongoing", label: "Customer confirmed", requires: mill("order.work"), when: [{ column: "stateKey", op: "is", value: ["PENDING"] }, { column: "assigned", op: "is", value: ["Yes"] }], do: { confirm: { title: "Have these customers confirmed?", body: "Each order moves to Ongoing. One that is another rep's stays Pending.", confirm: "Mark Ongoing" }, endpoint: "/api/milling/customer-orders/ongoing-many" } },
+    { key: "cancel", label: "Cancel", tone: "bad", requires: mill("order.work"), when: [{ column: "stateKey", op: "is", value: ["PENDING", "ONGOING"] }], do: { sheet: "mill-order-cancel" } },
     { key: "export" },
   ],
-  primary: { label: "New order", icon: "plus", requires: mill("order.manage"), sheet: "mill-order-new" },
-  card: { title: "customer", badge: "state", figure: "bags", meta: "{code} · {products}", metaMono: ["code"] },
+  primary: { label: "Log an order", icon: "plus", requires: mill("order.log"), sheet: "mill-order-new" },
+  card: { title: "customer", badge: "state", figure: "bags", meta: "{code} · {rep} · {products}", metaMono: ["code"] },
   empty: {
     icon: "ClipboardText",
     title: "No orders yet",
-    line: "An order is what a customer wants and when. Confirmed orders reserve the oldest bags and go out on a despatch note.",
-    primary: { label: "New order", sheet: "mill-order-new", requires: mill("order.manage") },
+    line: "Marketing logs the orders it wins. The accountant assigns each to a sales rep, who confirms it with the customer and puts it on a trip.",
+    primary: { label: "Log an order", sheet: "mill-order-new", requires: mill("order.log") },
   },
 };
 
